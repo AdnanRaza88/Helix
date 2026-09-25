@@ -40,23 +40,9 @@ class GitHubClient {
     return res.body.isEmpty ? {'ok': true} : jsonDecode(res.body);
   }
 
-  Future<dynamic> patch(String path, Map<String, dynamic> body) async {
-    if (!isLive) {
-      return {'ok': true, 'simulated': true, 'path': path, 'body': body};
-    }
-    final res = await http.patch(
-      Uri.parse('$_api$path'),
-      headers: {..._headers, 'Content-Type': 'application/json'},
-      body: jsonEncode(body),
-    );
-    if (res.statusCode >= 400) {
-      throw Exception('GitHub ${res.statusCode}: ${res.body}');
-    }
-    return res.body.isEmpty ? {'ok': true} : jsonDecode(res.body);
-  }
-
   Future<List<dynamic>> listRepos({int perPage = 30}) async {
-    final data = await get('/user/repos?sort=updated&per_page=$perPage&affiliation=owner,collaborator');
+    final data = await get(
+        '/user/repos?sort=updated&per_page=$perPage&affiliation=owner,collaborator');
     return data is List ? data : [];
   }
 
@@ -65,11 +51,8 @@ class GitHubClient {
     return data is Map<String, dynamic> ? data : {};
   }
 
-  Future<dynamic> createIssue(String owner, String repo, String title, String body) {
-    return post('/repos/$owner/$repo/issues', {'title': title, 'body': body});
-  }
-
-  Future<dynamic> createRepo(String name, {String? description, bool private = false}) {
+  Future<dynamic> createRepo(String name,
+      {String? description, bool private = false}) {
     return post('/user/repos', {
       'name': name,
       'description': description ?? '',
@@ -84,7 +67,6 @@ class GitHubClient {
         'login': 'helix-user',
         'name': 'Helix Pilot',
         'public_repos': 5,
-        'avatar_url': '',
       };
     }
     if (path.startsWith('/user/repos')) {
@@ -96,7 +78,6 @@ class GitHubClient {
           'private': false,
           'language': 'TypeScript',
           'stargazers_count': 128,
-          'html_url': 'https://github.com/helix-user/helix-core',
         },
         {
           'full_name': 'helix-user/pulse-api',
@@ -105,7 +86,6 @@ class GitHubClient {
           'private': true,
           'language': 'Go',
           'stargazers_count': 4,
-          'html_url': 'https://github.com/helix-user/pulse-api',
         },
         {
           'full_name': 'helix-user/glass-ui',
@@ -114,7 +94,6 @@ class GitHubClient {
           'private': false,
           'language': 'Dart',
           'stargazers_count': 42,
-          'html_url': 'https://github.com/helix-user/glass-ui',
         },
       ];
     }
