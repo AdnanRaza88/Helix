@@ -10,12 +10,13 @@ See the full plan in the project docs. Phase status as of 2026-09-25:
 - [x] Quarantine root web stubs (`archive/web-stub/`)
 - [x] Bump version `1.3.0+4`
 
-## Phase B — Agent core
-- [ ] `system_prompt.dart`
-- [ ] `context_compactor.dart`
-- [ ] `tool_router.dart` + Gemini function calling
-- [ ] Phase 1 `github_ops` tools
-- [ ] Confirm UI sheet for mutations
+## Phase B — Agent core (done)
+- [x] `system_prompt.dart`
+- [x] `context_compactor.dart`
+- [x] `tool_router.dart` + Gemini function calling
+- [x] Phase 1 `github_ops` tools
+- [x] Confirm UI sheet for mutations
+- [x] Version `1.4.0+5`
 
 ## Phase C — Chat UX
 - [ ] Streaming bubbles
