@@ -30,22 +30,52 @@ class SessionRepo {
         pinned: (row['pinned'] as int? ?? 0) == 1,
         model: row['model'] as String?,
         meta: row['meta'] as String?,
-        messages: msgs
-            .map((m) => ChatMessage(
-                  id: m['id'] as String,
-                  role: m['role'] as String,
-                  text: m['content'] as String? ?? '',
-                  at: DateTime.fromMillisecondsSinceEpoch(m['created_at'] as int),
-                  status: m['status'] as String? ?? 'done',
-                  parentId: m['parent_id'] as String?,
-                  editedAt: m['edited_at'] == null
-                      ? null
-                      : DateTime.fromMillisecondsSinceEpoch(m['edited_at'] as int),
-                ))
-            .toList(),
+        messages: msgs.map((m) => _fromRow(m)).toList(),
       ));
     }
     return out;
+  }
+
+  ChatMessage _fromRow(Map<String, Object?> m) {
+    var text = m['content'] as String? ?? '';
+    final tools = <String>[];
+    final attachments = <String>[];
+    final toolMatch = RegExp(r'\n__tools__:([^\n]*)\s*$');
+    final fileMatch = RegExp(r'\n__files__:([^\n]*)\s*$');
+    final fm = fileMatch.firstMatch(text);
+    if (fm != null) {
+      attachments.addAll(
+        fm.group(1)!.split(',').where((e) => e.trim().isNotEmpty),
+      );
+      text = text.replaceFirst(fileMatch, '');
+    }
+    final tm = toolMatch.firstMatch(text);
+    if (tm != null) {
+      tools.addAll(tm.group(1)!.split(',').where((e) => e.trim().isNotEmpty));
+      text = text.replaceFirst(toolMatch, '');
+    }
+    return ChatMessage(
+      id: m['id'] as String,
+      role: m['role'] as String,
+      text: text,
+      at: DateTime.fromMillisecondsSinceEpoch(m['created_at'] as int),
+      status: m['status'] as String? ?? 'done',
+      parentId: m['parent_id'] as String?,
+      editedAt: m['edited_at'] == null
+          ? null
+          : DateTime.fromMillisecondsSinceEpoch(m['edited_at'] as int),
+      tools: tools,
+      attachments: attachments,
+    );
+  }
+
+  String _encode(ChatMessage m) {
+    var text = m.text;
+    if (m.tools.isNotEmpty) text += '\n__tools__:${m.tools.join(',')}';
+    if (m.attachments.isNotEmpty) {
+      text += '\n__files__:${m.attachments.join(',')}';
+    }
+    return text;
   }
 
   Future<void> replaceAll(List<ChatSession> sessions) async {
@@ -68,7 +98,7 @@ class SessionRepo {
             'id': m.id,
             'session_id': s.id,
             'role': m.role,
-            'content': m.text,
+            'content': _encode(m),
             'created_at': m.at.millisecondsSinceEpoch,
             'edited_at': m.editedAt?.millisecondsSinceEpoch,
             'parent_id': m.parentId,
