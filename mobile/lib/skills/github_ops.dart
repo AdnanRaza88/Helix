@@ -123,6 +123,27 @@ class GithubOps {
           focus: args['focus']?.toString(),
           excerpt: excerpt,
         );
+      case 'github_delete_file':
+        return _encode(await client.deleteFile(
+          _str(args['owner']),
+          _str(args['repo']),
+          _str(args['path']),
+          _str(args['message']),
+          _str(args['sha']),
+          branch: args['branch']?.toString(),
+        ));
+      case 'github_delete_branch':
+        return _encode(await client.deleteBranch(
+          _str(args['owner']),
+          _str(args['repo']),
+          _str(args['branch']),
+        ));
+      case 'github_close_issue':
+        return _encode(await client.closeIssue(
+          _str(args['owner']),
+          _str(args['repo']),
+          _int(args['number'], 0),
+        ));
       default:
         return jsonEncode({'error': 'Unknown tool $name'});
     }
@@ -140,6 +161,12 @@ class GithubOps {
         return 'Create branch ${args['branch']} from ${args['from'] ?? 'main'} on ${args['owner']}/${args['repo']}';
       case 'github_trigger_workflow':
         return 'Dispatch workflow ${args['workflow_id']} on ${args['owner']}/${args['repo']} @ ${args['ref'] ?? 'main'}';
+      case 'github_delete_file':
+        return 'DELETE FILE ${args['owner']}/${args['repo']}:${args['path']}\nCommit: ${args['message']}\nType DELETE in the sheet.';
+      case 'github_delete_branch':
+        return 'DELETE BRANCH ${args['branch']} on ${args['owner']}/${args['repo']}\nType DELETE in the sheet.';
+      case 'github_close_issue':
+        return 'CLOSE ISSUE #${args['number']} on ${args['owner']}/${args['repo']}\nType DELETE in the sheet.';
       default:
         return name;
     }
