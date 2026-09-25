@@ -10,6 +10,7 @@ class SessionStore {
   static const _legacyKey = 'helix_chat_sessions_v1';
   static const _activeKey = 'helix_active_session_id';
   static const _migratedKey = 'helix_sessions_sqlite_v1';
+  static const _activeRepoKey = 'helix_active_repo';
 
   final SessionRepo _repo = SessionRepo();
   bool _migrated = false;
@@ -60,6 +61,20 @@ class SessionStore {
       await prefs.remove(_activeKey);
     } else {
       await prefs.setString(_activeKey, id);
+    }
+  }
+
+  Future<String?> getActiveRepo() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_activeRepoKey);
+  }
+
+  Future<void> setActiveRepo(String? ownerRepo) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (ownerRepo == null || ownerRepo.isEmpty) {
+      await prefs.remove(_activeRepoKey);
+    } else {
+      await prefs.setString(_activeRepoKey, ownerRepo);
     }
   }
 
