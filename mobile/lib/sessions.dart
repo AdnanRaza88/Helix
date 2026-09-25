@@ -1,88 +1,52 @@
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
-class ChatMessage {
-  ChatMessage({required this.role, required this.text, DateTime? at})
-      : at = at ?? DateTime.now();
+import 'data/models.dart';
+import 'data/session_repo.dart';
 
-  final String role;
-  final String text;
-  final DateTime at;
-
-  Map<String, dynamic> toJson() => {
-        'role': role,
-        'text': text,
-        'at': at.toIso8601String(),
-      };
-
-  factory ChatMessage.fromJson(Map<String, dynamic> j) => ChatMessage(
-        role: j['role'] as String? ?? 'user',
-        text: j['text'] as String? ?? '',
-        at: DateTime.tryParse(j['at'] as String? ?? '') ?? DateTime.now(),
-      );
-}
-
-class ChatSession {
-  ChatSession({
-    required this.id,
-    required this.title,
-    List<ChatMessage>? messages,
-    DateTime? updatedAt,
-  })  : messages = messages ?? [],
-        updatedAt = updatedAt ?? DateTime.now();
-
-  final String id;
-  String title;
-  final List<ChatMessage> messages;
-  DateTime updatedAt;
-
-  Map<String, dynamic> toJson() => {
-        'id': id,
-        'title': title,
-        'updatedAt': updatedAt.toIso8601String(),
-        'messages': messages.map((m) => m.toJson()).toList(),
-      };
-
-  factory ChatSession.fromJson(Map<String, dynamic> j) => ChatSession(
-        id: j['id'] as String,
-        title: j['title'] as String? ?? 'Chat',
-        updatedAt:
-            DateTime.tryParse(j['updatedAt'] as String? ?? '') ?? DateTime.now(),
-        messages: ((j['messages'] as List?) ?? [])
-            .map((e) => ChatMessage.fromJson(Map<String, dynamic>.from(e as Map)))
-            .toList(),
-      );
-
-  List<Map<String, String>> historyForApi() => messages
-      .map((m) => {'role': m.role, 'text': m.text})
-      .toList();
-}
+export 'data/models.dart';
 
 class SessionStore {
-  static const _key = 'helix_chat_sessions_v1';
+  static const _legacyKey = 'helix_chat_sessions_v1';
   static const _activeKey = 'helix_active_session_id';
+  static const _migratedKey = 'helix_sessions_sqlite_v1';
+
+  final SessionRepo _repo = SessionRepo();
+  bool _migrated = false;
+
+  Future<void> _ensureMigrated() async {
+    if (_migrated) return;
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool(_migratedKey) == true) {
+      _migrated = true;
+      return;
+    }
+    final raw = prefs.getString(_legacyKey);
+    if (raw != null && raw.isNotEmpty) {
+      try {
+        final list = jsonDecode(raw) as List;
+        final sessions = list
+            .map((e) => ChatSession.fromJson(Map<String, dynamic>.from(e as Map)))
+            .toList();
+        if (sessions.isNotEmpty) {
+          await _repo.replaceAll(sessions);
+        }
+      } catch (_) {}
+    }
+    await prefs.setBool(_migratedKey, true);
+    _migrated = true;
+  }
 
   Future<List<ChatSession>> loadAll() async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_key);
-    if (raw == null || raw.isEmpty) return [];
-    try {
-      final list = jsonDecode(raw) as List;
-      return list
-          .map((e) => ChatSession.fromJson(Map<String, dynamic>.from(e as Map)))
-          .toList()
-        ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
-    } catch (_) {
-      return [];
-    }
+    await _ensureMigrated();
+    final list = await _repo.listSessions();
+    list.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    return list;
   }
 
   Future<void> saveAll(List<ChatSession> sessions) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
-      _key,
-      jsonEncode(sessions.map((s) => s.toJson()).toList()),
-    );
+    await _ensureMigrated();
+    await _repo.replaceAll(sessions);
   }
 
   Future<String?> getActiveId() async {
@@ -99,7 +63,7 @@ class SessionStore {
     }
   }
 
-  String newId() => DateTime.now().millisecondsSinceEpoch.toString();
+  String newId() => _repo.newId();
 
   String titleFromFirstMessage(String text) {
     final t = text.trim().replaceAll(RegExp(r'\s+'), ' ');
