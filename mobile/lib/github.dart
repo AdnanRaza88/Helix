@@ -51,6 +51,35 @@ class GitHubClient {
     return res.body.isEmpty ? {'ok': true} : jsonDecode(res.body);
   }
 
+  Future<dynamic> patch(String path, Map<String, dynamic> body) async {
+    if (!isLive) return _sim('PATCH', path, body);
+    final res = await http.patch(
+      Uri.parse('$_api$path'),
+      headers: {..._headers, 'Content-Type': 'application/json'},
+      body: jsonEncode(body),
+    );
+    if (res.statusCode >= 400) {
+      throw Exception('GitHub ${res.statusCode}: ${res.body}');
+    }
+    return res.body.isEmpty ? {'ok': true} : jsonDecode(res.body);
+  }
+
+  Future<dynamic> delete(String path, {Map<String, dynamic>? body}) async {
+    if (!isLive) return _sim('DELETE', path, body);
+    final req = http.Request('DELETE', Uri.parse('$_api$path'));
+    req.headers.addAll(_headers);
+    if (body != null) {
+      req.headers['Content-Type'] = 'application/json';
+      req.body = jsonEncode(body);
+    }
+    final streamed = await http.Client().send(req);
+    final res = await http.Response.fromStream(streamed);
+    if (res.statusCode >= 400) {
+      throw Exception('GitHub ${res.statusCode}: ${res.body}');
+    }
+    return res.body.isEmpty ? {'ok': true} : jsonDecode(res.body);
+  }
+
   Future<List<dynamic>> listRepos({int perPage = 30}) async {
     final data = await get(
         '/user/repos?sort=updated&per_page=$perPage&affiliation=owner,collaborator');
@@ -219,6 +248,33 @@ class GitHubClient {
       '/repos/$owner/$repo/actions/workflows/$workflowId/dispatches',
       body,
     );
+  }
+
+  Future<dynamic> deleteFile(
+    String owner,
+    String repo,
+    String path,
+    String message,
+    String sha, {
+    String? branch,
+  }) {
+    final body = <String, dynamic>{'message': message, 'sha': sha};
+    if (branch != null && branch.isNotEmpty) body['branch'] = branch;
+    return delete('/repos/$owner/$repo/contents/$path', body: body);
+  }
+
+  Future<dynamic> deleteBranch(String owner, String repo, String branch) {
+    final b = branch.trim();
+    if (b == 'main' || b == 'master' || b.isEmpty) {
+      return Future.value({
+        'error': 'Refusing to delete default branch $b',
+      });
+    }
+    return delete('/repos/$owner/$repo/git/refs/heads/$b');
+  }
+
+  Future<dynamic> closeIssue(String owner, String repo, int number) {
+    return patch('/repos/$owner/$repo/issues/$number', {'state': 'closed'});
   }
 
   dynamic _sim(String method, String path, Map<String, dynamic>? body) {
