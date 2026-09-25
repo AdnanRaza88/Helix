@@ -51,44 +51,73 @@ class ChatPageState extends State<ChatPage> {
 
   Future<bool> _confirmMutation(String title, String detail) async {
     if (!mounted) return false;
+    final hard = title.startsWith('HARD');
+    final phrase = TextEditingController();
     final result = await showModalBottomSheet<bool>(
       context: context,
+      isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) {
-        return ClipRRect(
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-            child: Container(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
-              color: H.bgDeep.withValues(alpha: 0.92),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(title, style: const TextStyle(color: H.text, fontWeight: FontWeight.w700, fontSize: 18)),
-                  const SizedBox(height: 10),
-                  Text(detail, style: const TextStyle(color: H.textMuted, fontSize: 14, height: 1.4)),
-                  const SizedBox(height: 18),
-                  Row(children: [
-                    Expanded(child: OutlinedButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel'))),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: FilledButton(
-                        onPressed: () => Navigator.pop(ctx, true),
-                        style: FilledButton.styleFrom(backgroundColor: H.purple),
-                        child: const Text('Confirm'),
-                      ),
-                    ),
-                  ]),
-                ],
+        return StatefulBuilder(builder: (ctx, setLocal) {
+          final typed = phrase.text.trim().toUpperCase() == 'DELETE';
+          return Padding(
+            padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+            child: ClipRRect(
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                child: Container(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
+                  color: H.bgDeep.withValues(alpha: 0.92),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(title, style: TextStyle(color: hard ? H.pink : H.text, fontWeight: FontWeight.w700, fontSize: 18)),
+                      const SizedBox(height: 10),
+                      Text(detail, style: const TextStyle(color: H.textMuted, fontSize: 14, height: 1.4)),
+                      if (hard) ...[
+                        const SizedBox(height: 12),
+                        const Text('Type DELETE to enable confirm.', style: TextStyle(color: H.pink, fontSize: 12)),
+                        const SizedBox(height: 8),
+                        TextField(
+                          controller: phrase,
+                          onChanged: (_) => setLocal(() {}),
+                          style: const TextStyle(color: H.text),
+                          decoration: const InputDecoration(hintText: 'DELETE', hintStyle: TextStyle(color: H.textMuted)),
+                        ),
+                      ],
+                      const SizedBox(height: 18),
+                      Row(children: [
+                        Expanded(child: OutlinedButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel'))),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: FilledButton(
+                            onPressed: (!hard || typed) ? () => Navigator.pop(ctx, true) : null,
+                            style: FilledButton.styleFrom(backgroundColor: hard ? H.pink : H.purple),
+                            child: Text(hard ? 'Delete' : 'Confirm'),
+                          ),
+                        ),
+                      ]),
+                    ],
+                  ),
+                ),
               ),
             ),
-          ),
-        );
+          );
+        });
       },
     );
+    phrase.dispose();
     return result == true;
+  }
+
+  Future<void> _exportSession() async {
+    if (active == null) return;
+    final json = store.exportSession(active!);
+    await Clipboard.setData(ClipboardData(text: json));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Session JSON copied'), duration: Duration(seconds: 2)));
   }
 
   Future<void> _loadSessions() async {
@@ -289,6 +318,7 @@ class ChatPageState extends State<ChatPage> {
           child: Row(children: [
             IconButton(onPressed: () => setState(() => showDrawer = !showDrawer), icon: const Icon(Icons.menu_rounded, color: H.text), tooltip: 'Sessions'),
             const Expanded(child: Text('Chat', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: H.text))),
+            IconButton(onPressed: _exportSession, icon: const Icon(Icons.ios_share_rounded, color: H.purpleSoft), tooltip: 'Export session'),
             IconButton(onPressed: _newChat, icon: const Icon(Icons.edit_square, color: H.purpleSoft), tooltip: 'New chat'),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
