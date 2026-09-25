@@ -25,7 +25,14 @@ class ChatPageState extends State<ChatPage> {
   @override
   void initState() {
     super.initState();
+    widget.gemini.bindConfirm(_confirmMutation);
     _loadSessions();
+  }
+
+  @override
+  void didUpdateWidget(ChatPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    widget.gemini.bindConfirm(_confirmMutation);
   }
 
   @override
@@ -33,6 +40,53 @@ class ChatPageState extends State<ChatPage> {
     controller.dispose();
     scroll.dispose();
     super.dispose();
+  }
+
+  Future<bool> _confirmMutation(String title, String detail) async {
+    if (!mounted) return false;
+    final result = await showModalBottomSheet<bool>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return ClipRRect(
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
+              color: H.bgDeep.withValues(alpha: 0.92),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(title, style: const TextStyle(color: H.text, fontWeight: FontWeight.w700, fontSize: 18)),
+                  const SizedBox(height: 10),
+                  Text(detail, style: const TextStyle(color: H.textMuted, fontSize: 14, height: 1.4)),
+                  const SizedBox(height: 18),
+                  Row(children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.pop(ctx, false),
+                        child: const Text('Cancel'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: FilledButton(
+                        onPressed: () => Navigator.pop(ctx, true),
+                        style: FilledButton.styleFrom(backgroundColor: H.purple),
+                        child: const Text('Confirm'),
+                      ),
+                    ),
+                  ]),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+    return result == true;
   }
 
   Future<void> _loadSessions() async {
@@ -151,7 +205,7 @@ class ChatPageState extends State<ChatPage> {
                   SizedBox(height: 12),
                   Text('Ask Helix anything', style: TextStyle(color: H.text, fontWeight: FontWeight.w600, fontSize: 17)),
                   SizedBox(height: 8),
-                  Text('List my repos / Who am I on GitHub / Create a repo. Sessions save automatically.', textAlign: TextAlign.center, style: TextStyle(color: H.textMuted, fontSize: 13, height: 1.5)),
+                  Text('List repos, open issues, read or write files. Writes ask for confirm.', textAlign: TextAlign.center, style: TextStyle(color: H.textMuted, fontSize: 13, height: 1.5)),
                 ]))))
               : ListView.builder(
                   controller: scroll,
