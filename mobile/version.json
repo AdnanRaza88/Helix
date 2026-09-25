@@ -1,6 +1,6 @@
 {
-  "version": "1.5.0",
-  "build": 6,
-  "notes": "Phase C: streaming bubbles, edit/resend/copy/delete/retry/stop, markdown, attachments, tool chips",
+  "version": "1.6.0",
+  "build": 7,
+  "notes": "Phase D: PRs, branches, Actions list/trigger, code review format, active repo in session meta",
   "apk_url": "https://github.com/AdnanRaza88/Helix/actions"
 }
