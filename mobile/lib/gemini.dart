@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 
@@ -7,6 +8,11 @@ import 'agent/tool_router.dart';
 import 'github.dart';
 import 'skills/github_ops.dart';
 
+class StreamAbort {
+  bool cancelled = false;
+  void cancel() => cancelled = true;
+}
+
 class GeminiClient {
   GeminiClient({required this.apiKey, required this.github, this.confirm})
       : router = ToolRouter(ops: GithubOps(github), confirm: confirm);
@@ -15,11 +21,16 @@ class GeminiClient {
   final GitHubClient github;
   final MutationConfirm? confirm;
   final ToolRouter router;
+  StreamAbort? activeAbort;
 
   bool get isLive => apiKey.isNotEmpty;
 
   void bindConfirm(MutationConfirm fn) {
     router.confirm = fn;
+  }
+
+  void stop() {
+    activeAbort?.cancel();
   }
 
   static const _models = [
@@ -41,8 +52,17 @@ class GeminiClient {
   Future<String> runWithTools(
     String userMessage, {
     List<Map<String, String>> history = const [],
+    void Function(String delta)? onDelta,
+    void Function(String toolName)? onTool,
+    StreamAbort? abort,
   }) async {
-    if (!isLive) return _simulate(userMessage);
+    activeAbort = abort ?? StreamAbort();
+    final token = activeAbort!;
+    if (!isLive) {
+      final sim = _simulate(userMessage);
+      onDelta?.call(sim);
+      return sim;
+    }
 
     final compacted = ContextCompactor.compact(history);
     final contents = <Map<String, dynamic>>[];
@@ -65,33 +85,17 @@ class GeminiClient {
       {'functionDeclarations': router.functionDeclarations}
     ];
 
-    String? lastText;
+    String lastText = '';
     for (var hop = 0; hop < 6; hop++) {
-      final data = await _generate(contents, tools);
-      final candidates = data['candidates'] as List?;
-      if (candidates == null || candidates.isEmpty) {
-        return lastText ?? 'No response from Gemini.';
-      }
-      final content = candidates[0]['content'] as Map<String, dynamic>? ?? {};
-      final parts = content['parts'] as List? ?? const [];
-      final calls = <Map<String, dynamic>>[];
-      final texts = <String>[];
-      for (final p in parts) {
-        if (p is! Map) continue;
-        final fc = p['functionCall'];
-        if (fc is Map) {
-          calls.add(Map<String, dynamic>.from(fc));
-        }
-        final t = p['text'];
-        if (t is String && t.trim().isNotEmpty) texts.add(t);
-      }
-      if (texts.isNotEmpty) lastText = texts.join('\n');
-      if (calls.isEmpty) {
-        return lastText ?? 'Empty response.';
+      if (token.cancelled) return lastText.isEmpty ? 'Stopped.' : lastText;
+      final parsed = await _generateStream(contents, tools, token, onDelta);
+      lastText = parsed.text.isNotEmpty ? parsed.text : lastText;
+      if (parsed.calls.isEmpty) {
+        return lastText.isEmpty ? 'Empty response.' : lastText;
       }
       contents.add({
         'role': 'model',
-        'parts': calls
+        'parts': parsed.calls
             .map((c) => {
                   'functionCall': {
                     'name': c['name'],
@@ -101,8 +105,10 @@ class GeminiClient {
             .toList(),
       });
       final responseParts = <Map<String, dynamic>>[];
-      for (final c in calls) {
+      for (final c in parsed.calls) {
+        if (token.cancelled) break;
         final name = '${c['name'] ?? ''}';
+        onTool?.call(name);
         final args = Map<String, dynamic>.from(c['args'] as Map? ?? {});
         String result;
         try {
@@ -119,12 +125,14 @@ class GeminiClient {
       }
       contents.add({'role': 'user', 'parts': responseParts});
     }
-    return lastText ?? 'Tool loop stopped.';
+    return lastText.isEmpty ? 'Tool loop stopped.' : lastText;
   }
 
-  Future<Map<String, dynamic>> _generate(
+  Future<_Parsed> _generateStream(
     List<Map<String, dynamic>> contents,
     List<Map<String, dynamic>> tools,
+    StreamAbort abort,
+    void Function(String delta)? onDelta,
   ) async {
     final body = {
       'system_instruction': {
@@ -142,21 +150,23 @@ class GeminiClient {
 
     Exception? lastError;
     for (final model in _models) {
+      if (abort.cancelled) return _Parsed('', []);
       try {
-        final uri = Uri.parse('$_base/$model:generateContent?key=$apiKey');
-        final res = await http.post(
-          uri,
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode(body),
-        );
-        if (res.statusCode == 404) {
+        final uri =
+            Uri.parse('$_base/$model:streamGenerateContent?alt=sse&key=$apiKey');
+        final req = http.Request('POST', uri)
+          ..headers['Content-Type'] = 'application/json'
+          ..body = jsonEncode(body);
+        final streamed = await http.Client().send(req);
+        if (streamed.statusCode == 404) {
           lastError = Exception('Model $model not found');
           continue;
         }
-        if (res.statusCode >= 400) {
-          throw Exception('Gemini ${res.statusCode}: ${res.body}');
+        if (streamed.statusCode >= 400) {
+          final err = await streamed.stream.bytesToString();
+          throw Exception('Gemini ${streamed.statusCode}: $err');
         }
-        return jsonDecode(res.body) as Map<String, dynamic>;
+        return await _readSse(streamed, abort, onDelta);
       } catch (e) {
         lastError = e is Exception ? e : Exception(e.toString());
         if (e.toString().contains('404')) continue;
@@ -166,13 +176,55 @@ class GeminiClient {
     throw lastError ?? Exception('No Gemini model available');
   }
 
+  Future<_Parsed> _readSse(
+    http.StreamedResponse streamed,
+    StreamAbort abort,
+    void Function(String delta)? onDelta,
+  ) async {
+    final buf = StringBuffer();
+    final calls = <Map<String, dynamic>>[];
+    var carry = '';
+    await for (final chunk in streamed.stream.transform(utf8.decoder)) {
+      if (abort.cancelled) break;
+      carry += chunk;
+      final lines = carry.split('\n');
+      carry = lines.removeLast();
+      for (final line in lines) {
+        final trimmed = line.trim();
+        if (!trimmed.startsWith('data:')) continue;
+        final raw = trimmed.substring(5).trim();
+        if (raw.isEmpty || raw == '[DONE]') continue;
+        try {
+          final data = jsonDecode(raw) as Map<String, dynamic>;
+          final candidates = data['candidates'] as List?;
+          if (candidates == null || candidates.isEmpty) continue;
+          final content =
+              candidates[0]['content'] as Map<String, dynamic>? ?? {};
+          final parts = content['parts'] as List? ?? const [];
+          for (final p in parts) {
+            if (p is! Map) continue;
+            final fc = p['functionCall'];
+            if (fc is Map) {
+              calls.add(Map<String, dynamic>.from(fc));
+            }
+            final t = p['text'];
+            if (t is String && t.isNotEmpty) {
+              buf.write(t);
+              onDelta?.call(t);
+            }
+          }
+        } catch (_) {}
+      }
+    }
+    return _Parsed(buf.toString(), calls);
+  }
+
   String _simulate(String msg) {
     final lower = msg.toLowerCase();
     if (lower.contains('repo') || lower.contains('list')) {
       return '[SIM] Sample repositories:\n\n'
-          '\u2022 helix-user/helix-core (public) \u2605128\n'
-          '\u2022 helix-user/pulse-api (private) \u26054\n'
-          '\u2022 helix-user/glass-ui (public) \u260542\n\n'
+          '- helix-user/helix-core (public)\n'
+          '- helix-user/pulse-api (private)\n\n'
           'Add a GitHub token in Settings for live data.';
     }
     if (lower.contains('hello') || lower.contains('hi')) {
@@ -183,4 +235,10 @@ class GeminiClient {
         'Phase 1 tools: get user, list/get repos, issues, files, tree, search code.\n'
         'Writes (create issue, put file) require confirm when live.';
   }
+}
+
+class _Parsed {
+  _Parsed(this.text, this.calls);
+  final String text;
+  final List<Map<String, dynamic>> calls;
 }
