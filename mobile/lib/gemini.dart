@@ -22,6 +22,7 @@ class GeminiClient {
   final MutationConfirm? confirm;
   final ToolRouter router;
   StreamAbort? activeAbort;
+  String? activeRepo;
 
   bool get isLive => apiKey.isNotEmpty;
 
@@ -137,7 +138,12 @@ class GeminiClient {
     final body = {
       'system_instruction': {
         'parts': [
-          {'text': HelixPrompt.build(githubLive: github.isLive)}
+          {
+            'text': HelixPrompt.build(
+              githubLive: github.isLive,
+              activeRepo: activeRepo,
+            )
+          }
         ],
       },
       'contents': contents,
@@ -232,8 +238,9 @@ class GeminiClient {
           'Add a Gemini API key and GitHub token in Settings to unlock live tools.';
     }
     return '[SIM] Simulation mode.\n'
-        'Phase 1 tools: get user, list/get repos, issues, files, tree, search code.\n'
-        'Writes (create issue, put file) require confirm when live.';
+        'Phase 2 tools: PRs, branches, Actions list/trigger, code review.\n'
+        'Writes require confirm when live.'
+        '${activeRepo == null ? '' : '\nActive repo: $activeRepo'}';
   }
 }
 
