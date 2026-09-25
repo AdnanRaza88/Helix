@@ -1,6 +1,6 @@
 # Helix Master Plan
 
-See the full plan in the project docs. Phase status as of 2026-09-25:
+See the full plan in the project docs. Phase status as of 2026-09-26:
 
 ## Phase A — Foundation (done)
 - [x] Split `main.dart` into `ui/` modules
@@ -26,10 +26,11 @@ See the full plan in the project docs. Phase status as of 2026-09-25:
 - [x] Tool-run chips
 - [x] Version `1.5.0+6`
 
-## Phase D — GitHub Master expansion
-- [ ] Phase 2 tools (PR, branch, Actions)
-- [ ] Code review format
-- [ ] Active repo in session meta
+## Phase D — GitHub Master expansion (done)
+- [x] Phase 2 tools (PR, branch, Actions)
+- [x] Code review format
+- [x] Active repo in session meta
+- [x] Version `1.6.0+7`
 
 ## Phase E — Surfaces
 - [ ] `release.yml` + real `apk_url`
