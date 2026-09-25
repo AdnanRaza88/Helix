@@ -113,9 +113,144 @@ class GithubSchemas {
         'required': ['query'],
       },
     },
+    {
+      'name': 'github_list_pulls',
+      'description': 'List pull requests in a repository.',
+      'parameters': {
+        'type': 'object',
+        'properties': {
+          'owner': {'type': 'string'},
+          'repo': {'type': 'string'},
+          'state': {'type': 'string', 'description': 'open, closed, or all'},
+        },
+        'required': ['owner', 'repo'],
+      },
+    },
+    {
+      'name': 'github_get_pull',
+      'description': 'Get one pull request by number.',
+      'parameters': {
+        'type': 'object',
+        'properties': {
+          'owner': {'type': 'string'},
+          'repo': {'type': 'string'},
+          'number': {'type': 'integer'},
+        },
+        'required': ['owner', 'repo', 'number'],
+      },
+    },
+    {
+      'name': 'github_create_pull',
+      'description': 'Open a pull request. Host will confirm before write.',
+      'parameters': {
+        'type': 'object',
+        'properties': {
+          'owner': {'type': 'string'},
+          'repo': {'type': 'string'},
+          'title': {'type': 'string'},
+          'head': {'type': 'string', 'description': 'Source branch'},
+          'base': {'type': 'string', 'description': 'Target branch'},
+          'body': {'type': 'string'},
+        },
+        'required': ['owner', 'repo', 'title', 'head', 'base'],
+      },
+    },
+    {
+      'name': 'github_list_branches',
+      'description': 'List branches in a repository.',
+      'parameters': {
+        'type': 'object',
+        'properties': {
+          'owner': {'type': 'string'},
+          'repo': {'type': 'string'},
+        },
+        'required': ['owner', 'repo'],
+      },
+    },
+    {
+      'name': 'github_create_branch',
+      'description': 'Create a branch from an existing ref. Host will confirm.',
+      'parameters': {
+        'type': 'object',
+        'properties': {
+          'owner': {'type': 'string'},
+          'repo': {'type': 'string'},
+          'branch': {'type': 'string', 'description': 'New branch name'},
+          'from': {'type': 'string', 'description': 'Source branch, default main'},
+        },
+        'required': ['owner', 'repo', 'branch'],
+      },
+    },
+    {
+      'name': 'github_list_workflows',
+      'description': 'List GitHub Actions workflows in a repository.',
+      'parameters': {
+        'type': 'object',
+        'properties': {
+          'owner': {'type': 'string'},
+          'repo': {'type': 'string'},
+        },
+        'required': ['owner', 'repo'],
+      },
+    },
+    {
+      'name': 'github_list_workflow_runs',
+      'description': 'List recent Actions workflow runs.',
+      'parameters': {
+        'type': 'object',
+        'properties': {
+          'owner': {'type': 'string'},
+          'repo': {'type': 'string'},
+          'workflow_id': {
+            'type': 'string',
+            'description': 'Optional workflow id or file name'
+          },
+        },
+        'required': ['owner', 'repo'],
+      },
+    },
+    {
+      'name': 'github_trigger_workflow',
+      'description': 'Dispatch a workflow_dispatch workflow. Host will confirm.',
+      'parameters': {
+        'type': 'object',
+        'properties': {
+          'owner': {'type': 'string'},
+          'repo': {'type': 'string'},
+          'workflow_id': {
+            'type': 'string',
+            'description': 'Workflow file name or numeric id'
+          },
+          'ref': {'type': 'string', 'description': 'Branch or tag, default main'},
+        },
+        'required': ['owner', 'repo', 'workflow_id'],
+      },
+    },
+    {
+      'name': 'github_review_code',
+      'description':
+          'Fetch a file and return a structured code review (Summary, severity findings, patches, tests, security).',
+      'parameters': {
+        'type': 'object',
+        'properties': {
+          'owner': {'type': 'string'},
+          'repo': {'type': 'string'},
+          'path': {'type': 'string'},
+          'ref': {'type': 'string'},
+          'focus': {'type': 'string', 'description': 'Optional review focus'},
+        },
+        'required': ['owner', 'repo', 'path'],
+      },
+    },
   ];
 
-  static bool needsConfirm(String name) {
-    return name == 'github_create_issue' || name == 'github_put_file';
-  }
+  static const confirmNames = {
+    'github_create_issue',
+    'github_put_file',
+    'github_create_pull',
+    'github_create_branch',
+    'github_trigger_workflow',
+  };
+
+  static bool needsConfirm(String name) => confirmNames.contains(name);
 }
