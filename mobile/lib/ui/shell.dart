@@ -31,6 +31,7 @@ class _ShellState extends State<Shell> {
   AppUpdateInfo? updateInfo;
   late GitHubClient github;
   late GeminiClient gemini;
+  String? activeRepo;
 
   @override
   void initState() {
@@ -50,9 +51,21 @@ class _ShellState extends State<Shell> {
     final prefs = await SharedPreferences.getInstance();
     ghToken = prefs.getString('github_token') ?? '';
     geminiKey = prefs.getString('gemini_key') ?? '';
+    activeRepo = prefs.getString('helix_active_repo');
     github = GitHubClient(token: ghToken);
-    gemini = GeminiClient(apiKey: geminiKey, github: github);
+    gemini = GeminiClient(apiKey: geminiKey, github: github)
+      ..activeRepo = activeRepo;
     await _refresh();
+  }
+
+  Future<void> _setActiveRepo(String owner, String repo) async {
+    final prefs = await SharedPreferences.getInstance();
+    final value = '$owner/$repo';
+    await prefs.setString('helix_active_repo', value);
+    setState(() {
+      activeRepo = value;
+      gemini.activeRepo = value;
+    });
   }
 
   Future<void> _refresh() async {
@@ -83,7 +96,8 @@ class _ShellState extends State<Shell> {
       ghToken = token;
       geminiKey = key;
       github = GitHubClient(token: token);
-      gemini = GeminiClient(apiKey: key, github: github);
+      gemini = GeminiClient(apiKey: key, github: github)
+        ..activeRepo = activeRepo;
     });
     await _refresh();
   }
@@ -109,7 +123,13 @@ class _ShellState extends State<Shell> {
         onOpenRepos: () => setState(() => index = 2),
       ),
       ChatPage(gemini: gemini),
-      ReposPage(repos: repos, onRefresh: _refresh, loading: loading),
+      ReposPage(
+        repos: repos,
+        onRefresh: _refresh,
+        loading: loading,
+        activeRepo: activeRepo,
+        onSelect: _setActiveRepo,
+      ),
       SettingsPage(ghToken: ghToken, geminiKey: geminiKey, onSave: _saveKeys),
     ];
     return GradientBg(
