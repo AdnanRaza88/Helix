@@ -1,6 +1,6 @@
 {
-  "version": "1.6.0",
-  "build": 7,
-  "notes": "Phase D: PRs, branches, Actions list/trigger, code review format, active repo in session meta",
-  "apk_url": "https://github.com/AdnanRaza88/Helix/actions"
+  "version": "1.7.0",
+  "build": 8,
+  "notes": "Phase E: GitHub Release APK, status page, Pages deploy",
+  "apk_url": "https://github.com/AdnanRaza88/Helix/releases/latest/download/helix.apk"
 }

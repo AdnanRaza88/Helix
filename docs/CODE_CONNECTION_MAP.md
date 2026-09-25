@@ -1,11 +1,14 @@
 # Code Connection Map — Helix
 
-Last updated: 2026-09-26 00:15 PKT  
-Status: Phase D complete
+Last updated: 2026-09-26 01:05 PKT  
+Status: Phase E complete
 
 ## 1. Entry Points
 - `mobile/lib/main.dart` — Flutter `main()` → `HelixApp` → `ui/shell.dart` `Shell`
-- `.github/workflows/build-apk.yml` — CI APK build
+- `.github/workflows/build-apk.yml` — CI APK artifact build
+- `.github/workflows/release.yml` — tag / dispatch GitHub Release + helix.apk
+- `.github/workflows/pages.yml` — deploy `site/` to GitHub Pages
+- `site/index.html` — public status surface
 - `archive/web-stub/` — quarantined root web scaffolding (not product)
 
 ## 2. File Inventory (mobile hot path)
@@ -34,8 +37,9 @@ Status: Phase D complete
 | `mobile/lib/skills/github_schemas.dart` | Gemini tool defs | `GithubSchemas` | — | tool_router, ops |
 | `mobile/lib/skills/github_ops.dart` | Phase 1+2 tool impl | `GithubOps` | github, schemas, review_format | tool_router |
 | `mobile/lib/updater.dart` | Remote version check | `UpdateChecker` | http | shell |
-| `mobile/pubspec.yaml` | Deps / version | `1.6.0+7` | — | CI |
-| `mobile/version.json` | OTA metadata | version 1.6.0 build 7 | — | updater |
+| `mobile/pubspec.yaml` | Deps / version | `1.7.0+8` | — | CI |
+| `mobile/version.json` | OTA metadata | version 1.7.0 build 8 | — | updater |
+| `site/index.html` | Public status | — | — | pages.yml |
 
 ## 3. Import / Call Graph
 - `main` → ui/shell, ui/theme
@@ -44,6 +48,9 @@ Status: Phase D complete
 - `chat_page` → sessions meta owner/repo, gemini.runWithTools
 - `gemini` → HelixPrompt(activeRepo), ContextCompactor, ToolRouter → GithubOps → GitHubClient
 - Phase 2 tools: list/get/create pull, list/create branch, list workflows/runs, trigger workflow, review_code
+- `UpdateChecker` reads raw `mobile/version.json`; `apk_url` is latest-release download
+- `release.yml` builds APK and attaches `helix.apk` to a GitHub Release
+- `pages.yml` publishes `site/` via Actions Pages
 
 ## 4. Critical Shared Contracts
 - Prefs keys: `github_token`, `gemini_key`, `helix_active_session_id`, `helix_sessions_sqlite_v1`, `helix_active_repo` (`owner/repo`)
@@ -55,6 +62,7 @@ Status: Phase D complete
 - `ChatSession.historyForApi()` still `{role, text}`
 - Tool/file sidecar encoded in message content as `__tools__:` / `__files__:` lines
 - `version.json`: version, build, notes, apk_url
+- Canonical APK URL: `https://github.com/AdnanRaza88/Helix/releases/latest/download/helix.apk`
 
 ## 5. Change Impact Rules
 - Changing tool names/args → schemas + github_ops + this map
@@ -62,9 +70,11 @@ Status: Phase D complete
 - Changing session models → session_repo, sessions, chat_page
 - Schema change → bump `HelixDb.schemaVersion` and add `onUpgrade`
 - Bumping app version → `pubspec.yaml` + `version.json` together
+- Changing APK filename → release.yml + version.json apk_url + site/index.html
 - Multi-file edits must update this map same turn
 
 ## 6. Recent Changes Log
+- 2026-09-26 — Phase E: release.yml, pages.yml, site/index.html, apk_url latest/download/helix.apk, version 1.7.0+8
 - 2026-09-26 — Phase D: PR/branch/Actions tools, review format, active repo meta, version 1.6.0+7
 - 2026-09-25 — Phase C: streaming, message actions, markdown, attachments, tool chips, version 1.5.0+6
 - 2026-09-25 — Phase B: system prompt, compactor, function calling, Phase-1 ops, confirm sheet, version 1.4.0+5

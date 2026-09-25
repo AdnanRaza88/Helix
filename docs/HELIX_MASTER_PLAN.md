@@ -32,9 +32,10 @@ See the full plan in the project docs. Phase status as of 2026-09-26:
 - [x] Active repo in session meta
 - [x] Version `1.6.0+7`
 
-## Phase E — Surfaces
-- [ ] `release.yml` + real `apk_url`
-- [ ] HTML status + `pages.yml`
+## Phase E — Surfaces (done)
+- [x] `release.yml` + real `apk_url`
+- [x] HTML status + `pages.yml`
+- [x] Version `1.7.0+8`
 
 ## Phase F — Polish
 - [ ] Phase 3 destructive tools with hard confirm

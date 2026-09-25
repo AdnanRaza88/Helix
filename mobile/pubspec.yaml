@@ -1,7 +1,7 @@
 name: helix
 description: Helix — VIP glassmorphism GitHub agent with Gemini chat
 publish_to: none
-version: 1.6.0+7
+version: 1.7.0+8
 
 environment:
   sdk: ">=3.5.0 <4.0.0"
