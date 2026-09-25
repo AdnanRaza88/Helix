@@ -17,19 +17,30 @@ class GitHubClient {
       };
 
   Future<dynamic> get(String path) async {
-    if (!isLive) return _sim(path);
+    if (!isLive) return _sim('GET', path, null);
     final res = await http.get(Uri.parse('$_api$path'), headers: _headers);
     if (res.statusCode >= 400) {
       throw Exception('GitHub ${res.statusCode}: ${res.body}');
     }
-    return jsonDecode(res.body);
+    return res.body.isEmpty ? {} : jsonDecode(res.body);
   }
 
   Future<dynamic> post(String path, Map<String, dynamic> body) async {
-    if (!isLive) {
-      return {'ok': true, 'simulated': true, 'path': path, 'body': body};
-    }
+    if (!isLive) return _sim('POST', path, body);
     final res = await http.post(
+      Uri.parse('$_api$path'),
+      headers: {..._headers, 'Content-Type': 'application/json'},
+      body: jsonEncode(body),
+    );
+    if (res.statusCode >= 400) {
+      throw Exception('GitHub ${res.statusCode}: ${res.body}');
+    }
+    return res.body.isEmpty ? {'ok': true} : jsonDecode(res.body);
+  }
+
+  Future<dynamic> put(String path, Map<String, dynamic> body) async {
+    if (!isLive) return _sim('PUT', path, body);
+    final res = await http.put(
       Uri.parse('$_api$path'),
       headers: {..._headers, 'Content-Type': 'application/json'},
       body: jsonEncode(body),
@@ -51,6 +62,70 @@ class GitHubClient {
     return data is Map<String, dynamic> ? data : {};
   }
 
+  Future<Map<String, dynamic>> getRepo(String owner, String repo) async {
+    final data = await get('/repos/$owner/$repo');
+    return data is Map<String, dynamic> ? data : {};
+  }
+
+  Future<List<dynamic>> listIssues(String owner, String repo,
+      {String state = 'open'}) async {
+    final data = await get('/repos/$owner/$repo/issues?state=$state&per_page=30');
+    return data is List ? data : [];
+  }
+
+  Future<dynamic> createIssue(String owner, String repo, String title,
+      {String body = ''}) {
+    return post('/repos/$owner/$repo/issues', {
+      'title': title,
+      'body': body,
+    });
+  }
+
+  Future<Map<String, dynamic>> getFile(String owner, String repo, String path,
+      {String? ref}) async {
+    final q = ref == null || ref.isEmpty ? '' : '?ref=$ref';
+    final data = await get('/repos/$owner/$repo/contents/$path$q');
+    if (data is! Map<String, dynamic>) return {};
+    final encoded = data['content']?.toString().replaceAll('\n', '') ?? '';
+    if (encoded.isNotEmpty && data['encoding'] == 'base64') {
+      try {
+        data['decoded'] = utf8.decode(base64Decode(encoded));
+      } catch (_) {}
+    }
+    return data;
+  }
+
+  Future<dynamic> putFile(
+    String owner,
+    String repo,
+    String path,
+    String content,
+    String message, {
+    String? branch,
+    String? sha,
+  }) {
+    final body = <String, dynamic>{
+      'message': message,
+      'content': base64Encode(utf8.encode(content)),
+    };
+    if (branch != null && branch.isNotEmpty) body['branch'] = branch;
+    if (sha != null && sha.isNotEmpty) body['sha'] = sha;
+    return put('/repos/$owner/$repo/contents/$path', body);
+  }
+
+  Future<Map<String, dynamic>> listTree(String owner, String repo,
+      {String ref = 'HEAD', bool recursive = true}) async {
+    final rec = recursive ? '?recursive=1' : '';
+    final data = await get('/repos/$owner/$repo/git/trees/$ref$rec');
+    return data is Map<String, dynamic> ? data : {};
+  }
+
+  Future<Map<String, dynamic>> searchCode(String query) async {
+    final q = Uri.encodeQueryComponent(query);
+    final data = await get('/search/code?q=$q&per_page=15');
+    return data is Map<String, dynamic> ? data : {};
+  }
+
   Future<dynamic> createRepo(String name,
       {String? description, bool private = false}) {
     return post('/user/repos', {
@@ -61,7 +136,7 @@ class GitHubClient {
     });
   }
 
-  dynamic _sim(String path) {
+  dynamic _sim(String method, String path, Map<String, dynamic>? body) {
     if (path == '/user') {
       return {
         'login': 'helix-user',
@@ -97,6 +172,12 @@ class GitHubClient {
         },
       ];
     }
-    return [];
+    return {
+      'ok': true,
+      'simulated': true,
+      'method': method,
+      'path': path,
+      if (body != null) 'body': body,
+    };
   }
 }
