@@ -1,5 +1,9 @@
+import 'dart:io';
 import 'dart:ui';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 
 import '../../gemini.dart';
 import '../../sessions.dart';
@@ -21,6 +25,8 @@ class ChatPageState extends State<ChatPage> {
   ChatSession? active;
   bool sending = false;
   bool showDrawer = false;
+  final pendingFiles = <_Attach>[];
+  StreamAbort? abort;
 
   @override
   void initState() {
@@ -37,6 +43,7 @@ class ChatPageState extends State<ChatPage> {
 
   @override
   void dispose() {
+    abort?.cancel();
     controller.dispose();
     scroll.dispose();
     super.dispose();
@@ -64,12 +71,7 @@ class ChatPageState extends State<ChatPage> {
                   Text(detail, style: const TextStyle(color: H.textMuted, fontSize: 14, height: 1.4)),
                   const SizedBox(height: 18),
                   Row(children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: () => Navigator.pop(ctx, false),
-                        child: const Text('Cancel'),
-                      ),
-                    ),
+                    Expanded(child: OutlinedButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel'))),
                     const SizedBox(width: 10),
                     Expanded(
                       child: FilledButton(
@@ -131,31 +133,86 @@ class ChatPageState extends State<ChatPage> {
     await _persist();
   }
 
-  Future<void> _send() async {
-    final text = controller.text.trim();
-    if (text.isEmpty || sending) return;
+  Future<void> _pickFile() async {
+    final result = await FilePicker.platform.pickFiles(allowMultiple: true);
+    if (result == null) return;
+    for (final f in result.files) {
+      String excerpt = '';
+      if (f.path != null) {
+        try {
+          final file = File(f.path!);
+          final bytes = await file.length();
+          if (bytes < 80 * 1024) {
+            excerpt = await file.readAsString();
+            if (excerpt.length > 6000) excerpt = excerpt.substring(0, 6000);
+          }
+        } catch (_) {}
+      }
+      pendingFiles.add(_Attach(f.name, excerpt));
+    }
+    setState(() {});
+  }
+
+  String _composeUserText(String raw) {
+    if (pendingFiles.isEmpty) return raw;
+    final buf = StringBuffer(raw);
+    for (final f in pendingFiles) {
+      buf.writeln('\n\nAttached `${f.name}`:');
+      if (f.excerpt.isNotEmpty) {
+        buf.writeln('```');
+        buf.writeln(f.excerpt);
+        buf.writeln('```');
+      }
+    }
+    return buf.toString();
+  }
+
+  Future<void> _send({String? override, String? parentId}) async {
+    final typed = override ?? controller.text.trim();
+    if ((typed.isEmpty && pendingFiles.isEmpty) || sending) return;
+    final names = pendingFiles.map((e) => e.name).toList();
+    final text = _composeUserText(typed.isEmpty ? 'See attached files.' : typed);
+    pendingFiles.clear();
     active ??= ChatSession(id: store.newId(), title: store.titleFromFirstMessage(text));
     if (active!.messages.isEmpty) active!.title = store.titleFromFirstMessage(text);
+    final userMsg = ChatMessage(role: 'user', text: text, parentId: parentId, attachments: names);
+    final modelMsg = ChatMessage(role: 'model', text: '', status: 'streaming');
     setState(() {
-      active!.messages.add(ChatMessage(role: 'user', text: text));
+      active!.messages.add(userMsg);
+      active!.messages.add(modelMsg);
       active!.updatedAt = DateTime.now();
       sending = true;
     });
-    controller.clear();
+    if (override == null) controller.clear();
     _scrollEnd();
     await _persist();
+    abort = StreamAbort();
     try {
       final history = active!.historyForApi();
-      final prior = history.length > 1 ? history.sublist(0, history.length - 1) : <Map<String, String>>[];
-      final reply = await widget.gemini.runWithTools(text, history: prior);
+      final prior = history.length > 2 ? history.sublist(0, history.length - 2) : <Map<String, String>>[];
+      final reply = await widget.gemini.runWithTools(
+        text,
+        history: prior,
+        abort: abort,
+        onDelta: (d) {
+          if (!mounted) return;
+          setState(() => modelMsg.text += d);
+          _scrollEnd();
+        },
+        onTool: (name) {
+          if (!mounted) return;
+          setState(() => modelMsg.tools.add(name));
+        },
+      );
       setState(() {
-        active!.messages.add(ChatMessage(role: 'model', text: reply));
-        active!.updatedAt = DateTime.now();
+        if (modelMsg.text.isEmpty) modelMsg.text = reply;
+        modelMsg.status = 'done';
         sending = false;
       });
     } catch (e) {
       setState(() {
-        active!.messages.add(ChatMessage(role: 'model', text: 'Error: $e'));
+        modelMsg.text = modelMsg.text.isEmpty ? 'Error: $e' : modelMsg.text;
+        modelMsg.status = 'error';
         sending = false;
       });
     }
@@ -163,10 +220,61 @@ class ChatPageState extends State<ChatPage> {
     _scrollEnd();
   }
 
+  void _stop() {
+    abort?.cancel();
+    widget.gemini.stop();
+    setState(() => sending = false);
+  }
+
+  Future<void> _copy(ChatMessage m) async {
+    await Clipboard.setData(ClipboardData(text: m.text));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Copied'), duration: Duration(seconds: 1)));
+  }
+
+  Future<void> _deleteMessage(ChatMessage m) async {
+    active?.messages.removeWhere((e) => e.id == m.id);
+    setState(() {});
+    await _persist();
+  }
+
+  Future<void> _edit(ChatMessage m) async {
+    final edit = TextEditingController(text: m.text);
+    final next = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: H.bgMid,
+        title: const Text('Edit message', style: TextStyle(color: H.text)),
+        content: TextField(controller: edit, maxLines: 6, style: const TextStyle(color: H.text)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(ctx, edit.text.trim()), child: const Text('Save')),
+        ],
+      ),
+    );
+    if (next == null || next.isEmpty) return;
+    setState(() { m.text = next; m.editedAt = DateTime.now(); });
+    await _persist();
+  }
+
+  Future<void> _resend(ChatMessage m) async {
+    await _send(override: m.text, parentId: m.id);
+  }
+
+  Future<void> _retry(ChatMessage m) async {
+    final msgs = active?.messages ?? [];
+    final idx = msgs.indexWhere((e) => e.id == m.id);
+    String? userText;
+    if (idx > 0 && msgs[idx - 1].role == 'user') userText = msgs[idx - 1].text;
+    if (idx >= 0) msgs.removeAt(idx);
+    setState(() {});
+    if (userText != null) await _send(override: userText);
+  }
+
   void _scrollEnd() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (scroll.hasClients) {
-        scroll.animateTo(scroll.position.maxScrollExtent + 80, duration: const Duration(milliseconds: 280), curve: Curves.easeOut);
+        scroll.animateTo(scroll.position.maxScrollExtent + 80, duration: const Duration(milliseconds: 220), curve: Curves.easeOut);
       }
     });
   }
@@ -210,35 +318,30 @@ class ChatPageState extends State<ChatPage> {
               : ListView.builder(
                   controller: scroll,
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                  itemCount: messages.length + (sending ? 1 : 0),
-                  itemBuilder: (context, i) {
-                    if (sending && i == messages.length) {
-                      return const Align(alignment: Alignment.centerLeft, child: Padding(padding: EdgeInsets.all(12), child: SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, color: H.purple))));
-                    }
-                    final m = messages[i];
-                    final isUser = m.role == 'user';
-                    return Align(
-                      alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
-                      child: ConstrainedBox(
-                        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.82),
-                        child: GlassCard(
-                          margin: const EdgeInsets.only(bottom: 10),
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                          borderRadius: 18,
-                          child: Text(m.text, style: TextStyle(color: H.text, fontSize: 14.5, height: 1.4, fontWeight: isUser ? FontWeight.w500 : FontWeight.w400)),
-                        ),
-                      ),
-                    );
-                  },
+                  itemCount: messages.length,
+                  itemBuilder: (context, i) => _bubble(messages[i]),
                 ),
         ),
+        if (pendingFiles.isNotEmpty)
+          SizedBox(
+            height: 36,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              children: pendingFiles.map((f) => Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: Chip(label: Text(f.name, style: const TextStyle(fontSize: 11)), onDeleted: () => setState(() => pendingFiles.remove(f))),
+              )).toList(),
+            ),
+          ),
         ClipRRect(
           child: BackdropFilter(
             filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
             child: Container(
-              padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+              padding: const EdgeInsets.fromLTRB(8, 10, 12, 12),
               decoration: BoxDecoration(color: H.bgDeep.withValues(alpha: 0.7), border: const Border(top: BorderSide(color: H.glassBorder, width: 0.8))),
               child: Row(children: [
+                IconButton(onPressed: sending ? null : _pickFile, icon: const Icon(Icons.attach_file, color: H.purpleSoft)),
                 Expanded(child: TextField(
                   controller: controller,
                   style: const TextStyle(color: H.text),
@@ -255,7 +358,15 @@ class ChatPageState extends State<ChatPage> {
                   onSubmitted: (_) => _send(),
                 )),
                 const SizedBox(width: 8),
-                Material(color: H.purple, borderRadius: BorderRadius.circular(22), child: InkWell(onTap: sending ? null : _send, borderRadius: BorderRadius.circular(22), child: const SizedBox(width: 46, height: 46, child: Icon(Icons.send_rounded, color: Colors.white, size: 20)))),
+                Material(
+                  color: sending ? H.pink : H.purple,
+                  borderRadius: BorderRadius.circular(22),
+                  child: InkWell(
+                    onTap: sending ? _stop : _send,
+                    borderRadius: BorderRadius.circular(22),
+                    child: SizedBox(width: 46, height: 46, child: Icon(sending ? Icons.stop_rounded : Icons.send_rounded, color: Colors.white, size: 20)),
+                  ),
+                ),
               ]),
             ),
           ),
@@ -317,4 +428,73 @@ class ChatPageState extends State<ChatPage> {
       ],
     ]);
   }
+
+  Widget _bubble(ChatMessage m) {
+    final isUser = m.role == 'user';
+    return Align(
+      alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.86),
+        child: GlassCard(
+          margin: const EdgeInsets.only(bottom: 10),
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+          borderRadius: 18,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (m.attachments.isNotEmpty)
+                Wrap(spacing: 6, children: m.attachments.map((n) => Chip(visualDensity: VisualDensity.compact, label: Text(n, style: const TextStyle(fontSize: 11)))).toList()),
+              if (m.tools.isNotEmpty)
+                Wrap(spacing: 6, children: m.tools.map((t) => Chip(visualDensity: VisualDensity.compact, avatar: const Icon(Icons.build, size: 14), label: Text(t, style: const TextStyle(fontSize: 11)))).toList()),
+              if (m.status == 'streaming' && m.text.isEmpty)
+                const Padding(padding: EdgeInsets.symmetric(vertical: 6), child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: H.purple)))
+              else if (isUser)
+                Text(m.text, style: const TextStyle(color: H.text, fontSize: 14.5, height: 1.4, fontWeight: FontWeight.w500))
+              else
+                MarkdownBody(
+                  data: m.text.isEmpty ? '…' : m.text,
+                  selectable: true,
+                  styleSheet: MarkdownStyleSheet(
+                    p: const TextStyle(color: H.text, fontSize: 14.5, height: 1.4),
+                    code: const TextStyle(color: H.purpleSoft, fontSize: 13),
+                    listBullet: const TextStyle(color: H.text),
+                    h1: const TextStyle(color: H.text, fontSize: 20, fontWeight: FontWeight.w700),
+                    h2: const TextStyle(color: H.text, fontSize: 18, fontWeight: FontWeight.w700),
+                    h3: const TextStyle(color: H.text, fontSize: 16, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              if (m.editedAt != null)
+                const Padding(padding: EdgeInsets.only(top: 4), child: Text('edited', style: TextStyle(color: H.textMuted, fontSize: 10))),
+              Align(
+                alignment: Alignment.centerRight,
+                child: PopupMenuButton<String>(
+                  icon: const Icon(Icons.more_horiz, color: H.textMuted, size: 18),
+                  onSelected: (v) {
+                    if (v == 'copy') _copy(m);
+                    if (v == 'delete') _deleteMessage(m);
+                    if (v == 'edit') _edit(m);
+                    if (v == 'resend') _resend(m);
+                    if (v == 'retry') _retry(m);
+                  },
+                  itemBuilder: (_) => [
+                    const PopupMenuItem(value: 'copy', child: Text('Copy')),
+                    if (isUser) const PopupMenuItem(value: 'edit', child: Text('Edit')),
+                    if (isUser) const PopupMenuItem(value: 'resend', child: Text('Resend')),
+                    if (!isUser) const PopupMenuItem(value: 'retry', child: Text('Retry')),
+                    const PopupMenuItem(value: 'delete', child: Text('Delete')),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _Attach {
+  _Attach(this.name, this.excerpt);
+  final String name;
+  final String excerpt;
 }
