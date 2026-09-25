@@ -2,15 +2,17 @@
 
 Glassmorphism GitHub agent for Android with Gemini chat control.
 
+Version **1.3.0+4** — Phase A foundation: SQLite sessions, split UI modules.
+
 ## Features
-- **Glassmorphism UI** (frosted glass cards, purple depth, soft orbs)
-- **GitHub live control** via Personal Access Token
-- **Gemini provider** (Google AI) for natural-language chat
-- List repos, profile, create repositories from chat
+- Glassmorphism UI
+- GitHub live control via PAT
+- Gemini chat
+- Sessions stored in SQLite (migrates old SharedPreferences chats)
 - Simulation mode when keys are empty
 
 ## Setup keys
-1. Open **Settings**
+1. Open Settings
 2. Paste GitHub PAT (`repo` + `user` scopes)
 3. Paste Gemini API key from aistudio.google.com/apikey
 4. Save → Chat tab becomes live
