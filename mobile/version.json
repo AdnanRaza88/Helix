@@ -1,6 +1,6 @@
 {
-  "version": "1.4.0",
-  "build": 5,
-  "notes": "Phase B: Helix system prompt, context compaction, Gemini function calling, Phase-1 GitHub tools, mutation confirm sheet",
+  "version": "1.5.0",
+  "build": 6,
+  "notes": "Phase C: streaming bubbles, edit/resend/copy/delete/retry/stop, markdown, attachments, tool chips",
   "apk_url": "https://github.com/AdnanRaza88/Helix/actions"
 }

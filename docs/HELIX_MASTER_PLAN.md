@@ -18,12 +18,13 @@ See the full plan in the project docs. Phase status as of 2026-09-25:
 - [x] Confirm UI sheet for mutations
 - [x] Version `1.4.0+5`
 
-## Phase C — Chat UX
-- [ ] Streaming bubbles
-- [ ] Edit / resend / copy / delete / retry / stop
-- [ ] Markdown rendering
-- [ ] Attachment upload
-- [ ] Tool-run chips
+## Phase C — Chat UX (done)
+- [x] Streaming bubbles
+- [x] Edit / resend / copy / delete / retry / stop
+- [x] Markdown rendering
+- [x] Attachment upload
+- [x] Tool-run chips
+- [x] Version `1.5.0+6`
 
 ## Phase D — GitHub Master expansion
 - [ ] Phase 2 tools (PR, branch, Actions)
