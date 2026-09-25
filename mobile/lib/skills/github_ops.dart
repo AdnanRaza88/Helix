@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import '../agent/review_format.dart';
 import '../github.dart';
 import 'github_schemas.dart';
 
@@ -55,6 +56,73 @@ class GithubOps {
         ));
       case 'github_search_code':
         return _encode(await client.searchCode(_str(args['query'])));
+      case 'github_list_pulls':
+        return _encode(await client.listPulls(
+          _str(args['owner']),
+          _str(args['repo']),
+          state: _str(args['state'], 'open'),
+        ));
+      case 'github_get_pull':
+        return _encode(await client.getPull(
+          _str(args['owner']),
+          _str(args['repo']),
+          _int(args['number'], 0),
+        ));
+      case 'github_create_pull':
+        return _encode(await client.createPull(
+          _str(args['owner']),
+          _str(args['repo']),
+          title: _str(args['title']),
+          head: _str(args['head']),
+          base: _str(args['base']),
+          body: _str(args['body'], ''),
+        ));
+      case 'github_list_branches':
+        return _encode(await client.listBranches(
+          _str(args['owner']),
+          _str(args['repo']),
+        ));
+      case 'github_create_branch':
+        return _encode(await client.createBranch(
+          _str(args['owner']),
+          _str(args['repo']),
+          _str(args['branch']),
+          _str(args['from'], 'main'),
+        ));
+      case 'github_list_workflows':
+        return _encode(await client.listWorkflows(
+          _str(args['owner']),
+          _str(args['repo']),
+        ));
+      case 'github_list_workflow_runs':
+        return _encode(await client.listWorkflowRuns(
+          _str(args['owner']),
+          _str(args['repo']),
+          workflowId: args['workflow_id']?.toString(),
+        ));
+      case 'github_trigger_workflow':
+        return _encode(await client.triggerWorkflow(
+          _str(args['owner']),
+          _str(args['repo']),
+          _str(args['workflow_id']),
+          _str(args['ref'], 'main'),
+        ));
+      case 'github_review_code':
+        final file = await client.getFile(
+          _str(args['owner']),
+          _str(args['repo']),
+          _str(args['path']),
+          ref: args['ref']?.toString(),
+        );
+        final excerpt = file['decoded']?.toString() ?? file['content']?.toString() ?? '';
+        return ReviewFormat.skeleton(
+          owner: _str(args['owner']),
+          repo: _str(args['repo']),
+          path: _str(args['path']),
+          ref: args['ref']?.toString(),
+          focus: args['focus']?.toString(),
+          excerpt: excerpt,
+        );
       default:
         return jsonEncode({'error': 'Unknown tool $name'});
     }
@@ -66,6 +134,12 @@ class GithubOps {
         return 'Create issue "${args['title']}" on ${args['owner']}/${args['repo']}';
       case 'github_put_file':
         return 'Write ${args['path']} on ${args['owner']}/${args['repo']}\nCommit: ${args['message']}';
+      case 'github_create_pull':
+        return 'Open PR "${args['title']}" ${args['head']} -> ${args['base']} on ${args['owner']}/${args['repo']}';
+      case 'github_create_branch':
+        return 'Create branch ${args['branch']} from ${args['from'] ?? 'main'} on ${args['owner']}/${args['repo']}';
+      case 'github_trigger_workflow':
+        return 'Dispatch workflow ${args['workflow_id']} on ${args['owner']}/${args['repo']} @ ${args['ref'] ?? 'main'}';
       default:
         return name;
     }
