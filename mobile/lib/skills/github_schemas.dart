@@ -242,6 +242,50 @@ class GithubSchemas {
         'required': ['owner', 'repo', 'path'],
       },
     },
+    {
+      'name': 'github_delete_file',
+      'description':
+          'Delete one file. Hard confirm required. Never use for mass delete.',
+      'parameters': {
+        'type': 'object',
+        'properties': {
+          'owner': {'type': 'string'},
+          'repo': {'type': 'string'},
+          'path': {'type': 'string'},
+          'message': {'type': 'string'},
+          'sha': {'type': 'string', 'description': 'Blob SHA of the file'},
+          'branch': {'type': 'string'},
+        },
+        'required': ['owner', 'repo', 'path', 'message', 'sha'],
+      },
+    },
+    {
+      'name': 'github_delete_branch',
+      'description':
+          'Delete a non-default branch. Hard confirm. Refuses main/master.',
+      'parameters': {
+        'type': 'object',
+        'properties': {
+          'owner': {'type': 'string'},
+          'repo': {'type': 'string'},
+          'branch': {'type': 'string'},
+        },
+        'required': ['owner', 'repo', 'branch'],
+      },
+    },
+    {
+      'name': 'github_close_issue',
+      'description': 'Close an issue by number. Hard confirm required.',
+      'parameters': {
+        'type': 'object',
+        'properties': {
+          'owner': {'type': 'string'},
+          'repo': {'type': 'string'},
+          'number': {'type': 'integer'},
+        },
+        'required': ['owner', 'repo', 'number'],
+      },
+    },
   ];
 
   static const confirmNames = {
@@ -250,7 +294,18 @@ class GithubSchemas {
     'github_create_pull',
     'github_create_branch',
     'github_trigger_workflow',
+    'github_delete_file',
+    'github_delete_branch',
+    'github_close_issue',
+  };
+
+  static const hardConfirmNames = {
+    'github_delete_file',
+    'github_delete_branch',
+    'github_close_issue',
   };
 
   static bool needsConfirm(String name) => confirmNames.contains(name);
+
+  static bool isHardConfirm(String name) => hardConfirmNames.contains(name);
 }
