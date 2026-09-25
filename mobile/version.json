@@ -1,6 +1,6 @@
 {
-  "version": "1.2.0",
-  "build": 3,
-  "notes": "Gemini model fix, ChatGPT-style sessions with full context, in-app update checker",
+  "version": "1.3.0",
+  "build": 4,
+  "notes": "Phase A: SQLite sessions, split UI modules, connection map, web stubs quarantined",
   "apk_url": "https://github.com/AdnanRaza88/Helix/actions"
 }
