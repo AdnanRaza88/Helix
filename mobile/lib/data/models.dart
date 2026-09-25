@@ -7,16 +7,22 @@ class ChatMessage {
     this.status = 'done',
     this.parentId,
     this.editedAt,
+    List<String>? tools,
+    List<String>? attachments,
   })  : at = at ?? DateTime.now(),
-        id = id ?? DateTime.now().microsecondsSinceEpoch.toString();
+        id = id ?? DateTime.now().microsecondsSinceEpoch.toString(),
+        tools = tools ?? [],
+        attachments = attachments ?? [];
 
   final String id;
   final String role;
-  final String text;
+  String text;
   final DateTime at;
-  final String status;
-  final String? parentId;
-  final DateTime? editedAt;
+  String status;
+  String? parentId;
+  DateTime? editedAt;
+  final List<String> tools;
+  final List<String> attachments;
 
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -26,6 +32,8 @@ class ChatMessage {
         'status': status,
         if (parentId != null) 'parent_id': parentId,
         if (editedAt != null) 'edited_at': editedAt!.toIso8601String(),
+        if (tools.isNotEmpty) 'tools': tools,
+        if (attachments.isNotEmpty) 'attachments': attachments,
       };
 
   factory ChatMessage.fromJson(Map<String, dynamic> j) => ChatMessage(
@@ -37,6 +45,9 @@ class ChatMessage {
         status: j['status'] as String? ?? 'done',
         parentId: j['parent_id'] as String?,
         editedAt: DateTime.tryParse(j['edited_at'] as String? ?? ''),
+        tools: ((j['tools'] as List?) ?? []).map((e) => '$e').toList(),
+        attachments:
+            ((j['attachments'] as List?) ?? []).map((e) => '$e').toList(),
       );
 }
 
@@ -90,6 +101,8 @@ class ChatSession {
             .toList(),
       );
 
-  List<Map<String, String>> historyForApi() =>
-      messages.map((m) => {'role': m.role, 'text': m.text}).toList();
+  List<Map<String, String>> historyForApi() => messages
+      .where((m) => m.role == 'user' || m.role == 'model')
+      .map((m) => {'role': m.role, 'text': m.text})
+      .toList();
 }
