@@ -78,6 +78,17 @@ class SessionStore {
     }
   }
 
+  String exportSession(ChatSession session) {
+    return const JsonEncoder.withIndent('  ').convert(session.toJson());
+  }
+
+  String exportAll(List<ChatSession> sessions) {
+    return const JsonEncoder.withIndent('  ').convert({
+      'exportedAt': DateTime.now().toIso8601String(),
+      'sessions': sessions.map((s) => s.toJson()).toList(),
+    });
+  }
+
   String newId() => _repo.newId();
 
   String titleFromFirstMessage(String text) {

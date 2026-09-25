@@ -14,8 +14,9 @@ class ToolRouter {
 
   Future<String> dispatch(String name, Map<String, dynamic> args) async {
     if (GithubOps.needsConfirm(name) && confirm != null) {
+      final hard = GithubSchemas.isHardConfirm(name);
       final ok = await confirm!(
-        'Confirm $name',
+        hard ? 'HARD CONFIRM $name' : 'Confirm $name',
         ops.confirmSummary(name, args),
       );
       if (!ok) return '{"cancelled":true,"tool":"$name"}';
