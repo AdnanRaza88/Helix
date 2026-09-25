@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 class ChatMessage {
   ChatMessage({
     required this.role,
@@ -73,6 +75,31 @@ class ChatSession {
   bool pinned;
   String? model;
   String? meta;
+
+  Map<String, dynamic> metaMap() {
+    if (meta == null || meta!.isEmpty) return {};
+    try {
+      final v = jsonDecode(meta!);
+      return v is Map<String, dynamic> ? Map<String, dynamic>.from(v) : {};
+    } catch (_) {
+      return {};
+    }
+  }
+
+  String? get activeRepo {
+    final m = metaMap();
+    final o = (m['owner'] ?? '').toString();
+    final r = (m['repo'] ?? '').toString();
+    if (o.isEmpty || r.isEmpty) return null;
+    return '$o/$r';
+  }
+
+  void setActiveRepo(String owner, String repo) {
+    final m = metaMap();
+    m['owner'] = owner;
+    m['repo'] = repo;
+    meta = jsonEncode(m);
+  }
 
   Map<String, dynamic> toJson() => {
         'id': id,
