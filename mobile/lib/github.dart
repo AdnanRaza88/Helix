@@ -136,6 +136,91 @@ class GitHubClient {
     });
   }
 
+  Future<List<dynamic>> listPulls(String owner, String repo,
+      {String state = 'open'}) async {
+    final data = await get('/repos/$owner/$repo/pulls?state=$state&per_page=30');
+    return data is List ? data : [];
+  }
+
+  Future<Map<String, dynamic>> getPull(
+      String owner, String repo, int number) async {
+    final data = await get('/repos/$owner/$repo/pulls/$number');
+    return data is Map<String, dynamic> ? data : {};
+  }
+
+  Future<dynamic> createPull(
+    String owner,
+    String repo, {
+    required String title,
+    required String head,
+    required String base,
+    String body = '',
+  }) {
+    return post('/repos/$owner/$repo/pulls', {
+      'title': title,
+      'head': head,
+      'base': base,
+      'body': body,
+    });
+  }
+
+  Future<List<dynamic>> listBranches(String owner, String repo) async {
+    final data = await get('/repos/$owner/$repo/branches?per_page=50');
+    return data is List ? data : [];
+  }
+
+  Future<dynamic> createBranch(
+    String owner,
+    String repo,
+    String newBranch,
+    String fromRef,
+  ) async {
+    final refData = await get('/repos/$owner/$repo/git/ref/heads/$fromRef');
+    String sha = '';
+    if (refData is Map && refData['object'] is Map) {
+      sha = '${(refData['object'] as Map)['sha'] ?? ''}';
+    }
+    if (sha.isEmpty && refData is Map) {
+      sha = '${refData['sha'] ?? ''}';
+    }
+    if (sha.isEmpty) {
+      return {'error': 'Could not resolve $fromRef'};
+    }
+    return post('/repos/$owner/$repo/git/refs', {
+      'ref': 'refs/heads/$newBranch',
+      'sha': sha,
+    });
+  }
+
+  Future<Map<String, dynamic>> listWorkflows(String owner, String repo) async {
+    final data = await get('/repos/$owner/$repo/actions/workflows');
+    return data is Map<String, dynamic> ? data : {};
+  }
+
+  Future<Map<String, dynamic>> listWorkflowRuns(String owner, String repo,
+      {String? workflowId}) async {
+    final path = workflowId == null || workflowId.isEmpty
+        ? '/repos/$owner/$repo/actions/runs?per_page=20'
+        : '/repos/$owner/$repo/actions/workflows/$workflowId/runs?per_page=20';
+    final data = await get(path);
+    return data is Map<String, dynamic> ? data : {};
+  }
+
+  Future<dynamic> triggerWorkflow(
+    String owner,
+    String repo,
+    String workflowId,
+    String ref, {
+    Map<String, dynamic>? inputs,
+  }) {
+    final body = <String, dynamic>{'ref': ref};
+    if (inputs != null && inputs.isNotEmpty) body['inputs'] = inputs;
+    return post(
+      '/repos/$owner/$repo/actions/workflows/$workflowId/dispatches',
+      body,
+    );
+  }
+
   dynamic _sim(String method, String path, Map<String, dynamic>? body) {
     if (path == '/user') {
       return {
