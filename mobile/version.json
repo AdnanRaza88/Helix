@@ -1,6 +1,6 @@
 {
-  "version": "1.3.0",
-  "build": 4,
-  "notes": "Phase A: SQLite sessions, split UI modules, connection map, web stubs quarantined",
+  "version": "1.4.0",
+  "build": 5,
+  "notes": "Phase B: Helix system prompt, context compaction, Gemini function calling, Phase-1 GitHub tools, mutation confirm sheet",
   "apk_url": "https://github.com/AdnanRaza88/Helix/actions"
 }
