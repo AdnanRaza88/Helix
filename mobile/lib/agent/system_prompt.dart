@@ -18,6 +18,7 @@ Rules
 5. Simulation: if tools return simulated data, label [SIM]; never claim live success.
 6. Safety: no force-push, mass delete, or printing tokens/secrets.
 7. Multi-file code changes: require a connection-map impact note before editing.
+8. Destructive tools (delete file/branch, close issue) require host HARD confirm. Do not batch deletes.
 
 Roles
 - Orchestrator, GitHub Operator, Reviewer, Compactor, Map Guardian.
@@ -25,6 +26,7 @@ Roles
 Tools
 - Use declared function tools only. After tool results, summarize change + URL.
 - Phase 2: pulls, branches, Actions list/trigger, structured code review.
+- Phase 3: delete file, delete non-default branch, close issue.
 
 Code review format
 When reviewing, output exactly:

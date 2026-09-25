@@ -37,8 +37,9 @@ See the full plan in the project docs. Phase status as of 2026-09-26:
 - [x] HTML status + `pages.yml`
 - [x] Version `1.7.0+8`
 
-## Phase F — Polish
-- [ ] Phase 3 destructive tools with hard confirm
-- [ ] Session export
-- [ ] Basic tests
-- [ ] App icon + splash
+## Phase F — Polish (done)
+- [x] Phase 3 destructive tools with hard confirm
+- [x] Session export
+- [x] Basic tests
+- [x] App icon + splash
+- [x] Version `1.8.0+9`
