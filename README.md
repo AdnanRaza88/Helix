@@ -1,35 +1,27 @@
-# Helix
+# Helix VIP
 
-**Helix — GitHub command surface (Flutter mobile + web)**
+Glassmorphism GitHub agent for Android with Gemini chat control.
 
-Lightweight GitHub agent for Android. Browse repos, set a personal access token, and work in simulation or live mode.
+## Features
+- **Glassmorphism UI** (frosted glass cards, purple depth, soft orbs)
+- **GitHub live control** via Personal Access Token
+- **Gemini provider** (Google AI) for natural-language chat
+- List repos, profile, create repositories from chat
+- Simulation mode when keys are empty
 
-## Mobile (Flutter APK)
+## Setup keys
+1. Open **Settings**
+2. Paste GitHub PAT (`repo` + `user` scopes)
+3. Paste Gemini API key from aistudio.google.com/apikey
+4. Save → Chat tab becomes live
 
-### Build APK via GitHub Actions
-1. Push any change under `mobile/` (or run the workflow manually).
-2. Go to **Actions** tab → **Build Helix APK**.
-3. Download the `helix-apk` artifact when the job finishes.
+## APK
+GitHub Actions builds `app-release.apk` on every push to `mobile/` or manual dispatch.
+Download from the Actions run → Artifacts → **helix-apk**.
 
-APKs are also available as workflow artifacts for 30 days.
-
-### Local build
+## Local
 ```bash
 cd mobile
 flutter pub get
 flutter build apk --release
-# output: build/app/outputs/flutter-apk/app-release.apk
 ```
-
-### Features
-- Material 3 light theme
-- Simulation mode (no token needed)
-- Live GitHub mode with Personal Access Token
-- Repo list sorted by recent activity
-- Token stored via shared_preferences
-
-## Web (React / Vite)
-See root `package.json` and `src/` for the web command surface.
-
-## License
-Personal / private use.
