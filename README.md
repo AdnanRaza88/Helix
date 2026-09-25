@@ -1,35 +1,35 @@
 # Helix
 
-**Helix — GitHub command surface**
+**Helix — GitHub command surface (Flutter mobile + web)**
 
-A modern React + Vite app that turns natural language into GitHub operations. Browse repos, issues, PRs, actions, and files. Multi-agent coding support with xAI/Grok integration.
+Lightweight GitHub agent for Android. Browse repos, set a personal access token, and work in simulation or live mode.
 
-## Features
+## Mobile (Flutter APK)
 
-- Natural-language GitHub command interface
-- Repo picker, issues, pull requests, Actions, file browser
-- Multi-agent coding surface
-- Auth gates and session handling
-- Local-first friendly (PGlite / better-auth ready)
+### Build APK via GitHub Actions
+1. Push any change under `mobile/` (or run the workflow manually).
+2. Go to **Actions** tab → **Build Helix APK**.
+3. Download the `helix-apk` artifact when the job finishes.
 
-## Quick start
+APKs are also available as workflow artifacts for 30 days.
 
+### Local build
 ```bash
-npm install
-npm run dev
+cd mobile
+flutter pub get
+flutter build apk --release
+# output: build/app/outputs/flutter-apk/app-release.apk
 ```
 
-App runs at http://localhost:8080
+### Features
+- Material 3 light theme
+- Simulation mode (no token needed)
+- Live GitHub mode with Personal Access Token
+- Repo list sorted by recent activity
+- Token stored via shared_preferences
 
-## Stack
-
-- React + Vite + TypeScript
-- TanStack Router
-- Zustand
-- better-auth
-- Kysely / PGlite
-- Tailwind + Radix UI
+## Web (React / Vite)
+See root `package.json` and `src/` for the web command surface.
 
 ## License
-
-Private / personal use (update as needed).
+Personal / private use.
