@@ -4,9 +4,16 @@ import '../../updater.dart';
 import '../theme.dart';
 
 class UpdateBanner extends StatelessWidget {
-  const UpdateBanner({super.key, required this.info, required this.onTap});
+  const UpdateBanner({
+    super.key,
+    required this.info,
+    required this.onTap,
+    this.progress,
+  });
+
   final AppUpdateInfo info;
   final VoidCallback onTap;
+  final double? progress;
 
   @override
   Widget build(BuildContext context) {
@@ -26,35 +33,55 @@ class UpdateBanner extends StatelessWidget {
             borderRadius: BorderRadius.circular(14),
             border: Border.all(color: H.glassBorder),
           ),
-          child: Row(children: [
-            const Icon(Icons.system_update_rounded, color: Colors.white, size: 20),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Update available \u00b7 v${info.version}',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 13,
-                    ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
+                const Icon(Icons.system_update_rounded,
+                    color: Colors.white, size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        progress != null
+                            ? 'Downloading v${info.version}…'
+                            : 'Update available · v${info.version}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
+                        ),
+                      ),
+                      Text(
+                        info.notes,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.85),
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
                   ),
-                  Text(
-                    info.notes,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.85),
-                      fontSize: 11,
-                    ),
+                ),
+                const Icon(Icons.chevron_right, color: Colors.white),
+              ]),
+              if (progress != null) ...[
+                const SizedBox(height: 8),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: progress!.clamp(0.0, 1.0),
+                    minHeight: 4,
+                    backgroundColor: Colors.white.withValues(alpha: 0.2),
+                    color: Colors.white,
                   ),
-                ],
-              ),
-            ),
-            const Icon(Icons.chevron_right, color: Colors.white),
-          ]),
+                ),
+              ],
+            ],
+          ),
         ),
       ),
     );
