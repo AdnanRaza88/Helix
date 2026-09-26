@@ -29,20 +29,17 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Create Android platform + force SDK 36 on app and plugins
+      - name: Create Android platform + force SDK 36
         working-directory: mobile
         run: |
           set -e
           if [ ! -f android/app/build.gradle ] && [ ! -f android/app/build.gradle.kts ]; then
             flutter create . --project-name helix --org com.adnanraza.helix --platforms=android
           fi
-
           MANIFEST="android/app/src/main/AndroidManifest.xml"
           if [ -f "$MANIFEST" ] && ! grep -q 'android.permission.INTERNET' "$MANIFEST"; then
             sed -i 's|<application|<uses-permission android:name="android.permission.INTERNET"/>\n    <application|' "$MANIFEST"
           fi
-
-          # App-level SDK pins
           for f in android/app/build.gradle android/app/build.gradle.kts; do
             [ -f "$f" ] || continue
             sed -i \
@@ -57,56 +54,35 @@ jobs:
               -e 's/targetSdk = flutter.targetSdkVersion/targetSdk = 36/' \
               "$f" || true
           done
-
-          # Force every Android library (plugins) to compileSdk 36.
-          # Fixes: file_picker compiled against 34 vs flutter_plugin_android_lifecycle requiring 36.
-          if [ -f android/build.gradle.kts ]; then
-            if ! grep -q 'HELIX_FORCE_COMPILE_SDK' android/build.gradle.kts; then
-              cat >> android/build.gradle.kts << 'EOF'
-
-// HELIX_FORCE_COMPILE_SDK
-subprojects {
-    afterEvaluate {
-        val android = project.extensions.findByName("android")
-        if (android != null) {
-            try {
-                android.javaClass.getMethod("setCompileSdkVersion", Int::class.javaPrimitiveType).invoke(android, 36)
-            } catch (_: Throwable) {
-                try {
-                    android.javaClass.getMethod("setCompileSdk", Int::class.javaPrimitiveType).invoke(android, 36)
-                } catch (_: Throwable) {}
-            }
-        }
-    }
-}
-EOF
-            fi
-          elif [ -f android/build.gradle ]; then
-            if ! grep -q 'HELIX_FORCE_COMPILE_SDK' android/build.gradle; then
-              cat >> android/build.gradle << 'EOF'
-
-// HELIX_FORCE_COMPILE_SDK
-subprojects { subproject ->
-    subproject.afterEvaluate {
-        if (subproject.hasProperty("android")) {
-            subproject.android {
-                if (it.metaClass.respondsTo(it, "setCompileSdkVersion", Integer)) {
-                    it.setCompileSdkVersion(36)
-                } else if (it.hasProperty("compileSdk")) {
-                    it.compileSdk = 36
-                }
-            }
-        }
-    }
-}
-EOF
-            fi
-          fi
-
-          echo "=== app SDK lines ==="
-          grep -E 'Sdk|sdk' android/app/build.gradle.kts 2>/dev/null || grep -E 'Sdk|sdk' android/app/build.gradle 2>/dev/null || true
-          echo "=== root force marker ==="
-          grep -n 'HELIX_FORCE_COMPILE_SDK' android/build.gradle.kts android/build.gradle 2>/dev/null || true
+          python3 -c "
+          from pathlib import Path
+          patch = '''
+          // HELIX_FORCE_COMPILE_SDK
+          subprojects {
+              afterEvaluate {
+                  val android = project.extensions.findByName(\"android\")
+                  if (android != null) {
+                      try {
+                          android.javaClass.getMethod(\"setCompileSdkVersion\", Int::class.javaPrimitiveType).invoke(android, 36)
+                      } catch (_: Throwable) {
+                          try {
+                              android.javaClass.getMethod(\"setCompileSdk\", Int::class.javaPrimitiveType).invoke(android, 36)
+                          } catch (_: Throwable) {}
+                      }
+                  }
+              }
+          }
+          '''
+          for name in ['android/build.gradle.kts', 'android/build.gradle']:
+              p = Path(name)
+              if p.exists() and 'HELIX_FORCE_COMPILE_SDK' not in p.read_text():
+                  p.write_text(p.read_text().rstrip() + '\n' + patch)
+                  print('patched', name)
+          "
+          echo "=== app SDK ==="
+          grep -E 'Sdk|sdk' android/app/build.gradle.kts 2>/dev/null || true
+          echo "=== force marker ==="
+          grep -n HELIX_FORCE_COMPILE_SDK android/build.gradle.kts 2>/dev/null || true
 
       - name: Get dependencies
         working-directory: mobile
