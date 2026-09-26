@@ -54,12 +54,12 @@ jobs:
               -e 's/targetSdk = flutter.targetSdkVersion/targetSdk = 36/' \
               "$f" || true
           done
-          python3 -c "
+          python3 -c '
           from pathlib import Path
-          patch = '''
+          patch = """
           // HELIX_FORCE_COMPILE_SDK
           subprojects {
-              afterEvaluate {
+              plugins.whenPluginAdded {
                   val android = project.extensions.findByName(\"android\")
                   if (android != null) {
                       try {
@@ -72,13 +72,18 @@ jobs:
                   }
               }
           }
-          '''
-          for name in ['android/build.gradle.kts', 'android/build.gradle']:
+          """
+          for name in ["android/build.gradle.kts", "android/build.gradle"]:
               p = Path(name)
-              if p.exists() and 'HELIX_FORCE_COMPILE_SDK' not in p.read_text():
-                  p.write_text(p.read_text().rstrip() + '\n' + patch)
-                  print('patched', name)
-          "
+              if not p.exists():
+                  continue
+              text = p.read_text()
+              if "HELIX_FORCE_COMPILE_SDK" in text:
+                  idx = text.find("// HELIX_FORCE_COMPILE_SDK")
+                  text = text[:idx].rstrip()
+              p.write_text(text + "\n" + patch)
+              print("patched", name)
+          '
           echo "=== app SDK ==="
           grep -E 'Sdk|sdk' android/app/build.gradle.kts 2>/dev/null || true
           echo "=== force marker ==="
