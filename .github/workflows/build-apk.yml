@@ -11,7 +11,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 45
 
     steps:
       - name: Checkout
@@ -36,17 +36,39 @@ jobs:
           if [ ! -f android/app/build.gradle ] && [ ! -f android/app/build.gradle.kts ]; then
             flutter create . --project-name helix --org com.adnanraza.helix --platforms=android
           fi
+
+          # INTERNET permission
           MANIFEST="android/app/src/main/AndroidManifest.xml"
           if [ -f "$MANIFEST" ] && ! grep -q 'android.permission.INTERNET' "$MANIFEST"; then
             sed -i 's|<application|<uses-permission android:name="android.permission.INTERNET"/>\n    <application|' "$MANIFEST"
           fi
+
+          # Groovy build.gradle
           if [ -f android/app/build.gradle ]; then
             sed -i 's/minSdkVersion .*/minSdkVersion 24/' android/app/build.gradle || true
             sed -i 's/minSdk = .*/minSdk = 24/' android/app/build.gradle || true
+            sed -i 's/compileSdkVersion .*/compileSdkVersion 36/' android/app/build.gradle || true
+            sed -i 's/compileSdk = .*/compileSdk = 36/' android/app/build.gradle || true
+            sed -i 's/targetSdkVersion .*/targetSdkVersion 36/' android/app/build.gradle || true
+            sed -i 's/targetSdk = .*/targetSdk = 36/' android/app/build.gradle || true
           fi
+
+          # Kotlin DSL build.gradle.kts (Flutter 3.16+)
           if [ -f android/app/build.gradle.kts ]; then
             sed -i 's/minSdk = .*/minSdk = 24/' android/app/build.gradle.kts || true
+            sed -i 's/compileSdk = .*/compileSdk = 36/' android/app/build.gradle.kts || true
+            sed -i 's/targetSdk = .*/targetSdk = 36/' android/app/build.gradle.kts || true
+            # Fallback if using flutter.compileSdkVersion style
+            if ! grep -q 'compileSdk = 36' android/app/build.gradle.kts; then
+              sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 36/' android/app/build.gradle.kts || true
+              sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 24/' android/app/build.gradle.kts || true
+              sed -i 's/targetSdk = flutter.targetSdkVersion/targetSdk = 36/' android/app/build.gradle.kts || true
+            fi
           fi
+
+          echo "=== android/app/build.gradle.kts (sdk lines) ==="
+          grep -E 'Sdk|sdk' android/app/build.gradle.kts 2>/dev/null || true
+          grep -E 'Sdk|sdk' android/app/build.gradle 2>/dev/null || true
 
       - name: Get dependencies
         working-directory: mobile
@@ -62,6 +84,7 @@ jobs:
           set -e
           flutter build apk --release --no-tree-shake-icons
           test -f build/app/outputs/flutter-apk/app-release.apk
+          ls -lah build/app/outputs/flutter-apk/
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
