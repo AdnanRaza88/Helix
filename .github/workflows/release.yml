@@ -53,6 +53,9 @@ jobs:
           if [ -f "$MANIFEST" ] && ! grep -q 'android.permission.INTERNET' "$MANIFEST"; then
             sed -i 's|<application|<uses-permission android:name="android.permission.INTERNET"/>\n    <application|' "$MANIFEST"
           fi
+          if [ -f "$MANIFEST" ] && ! grep -q 'REQUEST_INSTALL_PACKAGES' "$MANIFEST"; then
+            sed -i 's|<application|<uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>\n    <application|' "$MANIFEST"
+          fi
 
       - name: Get dependencies
         working-directory: mobile
@@ -76,9 +79,6 @@ jobs:
           body: |
             Helix ${{ steps.ver.outputs.version }} (build ${{ steps.ver.outputs.build }})
             APK: helix.apk
-            Download: https://github.com/AdnanRaza88/Helix/releases/latest/download/helix.apk
+            Download and install over the previous build — chats and keys are preserved when the signing key matches.
           files: dist/helix.apk
-          generate_release_notes: true
-          make_latest: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          fail_on_unmatched_files: true
