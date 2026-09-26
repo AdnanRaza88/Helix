@@ -1,6 +1,6 @@
 {
-  "version": "1.8.1",
-  "build": 10,
-  "notes": "Fix UI import paths (repos_page) + CI Java17/minSdk24 so APK builds reliably",
+  "version": "1.9.0",
+  "build": 11,
+  "notes": "Multi-provider LLM (Gemini, Groq, OpenRouter), model picker, Nemotron/Qwen catalog, in-app APK download+install (data preserved)",
   "apk_url": "https://github.com/AdnanRaza88/Helix/releases/latest/download/helix.apk"
 }
