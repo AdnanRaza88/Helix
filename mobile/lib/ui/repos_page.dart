@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../theme.dart';
-import '../widgets/glass.dart';
+import 'theme.dart';
+import 'widgets/glass.dart';
 
 class ReposPage extends StatelessWidget {
   const ReposPage({

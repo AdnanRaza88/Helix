@@ -11,11 +11,17 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 40
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -23,15 +29,23 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Create Flutter project structure
+      - name: Create Android platform files
         working-directory: mobile
         run: |
-          if [ ! -d android ]; then
+          set -e
+          if [ ! -f android/app/build.gradle ] && [ ! -f android/app/build.gradle.kts ]; then
             flutter create . --project-name helix --org com.adnanraza.helix --platforms=android
           fi
           MANIFEST="android/app/src/main/AndroidManifest.xml"
           if [ -f "$MANIFEST" ] && ! grep -q 'android.permission.INTERNET' "$MANIFEST"; then
             sed -i 's|<application|<uses-permission android:name="android.permission.INTERNET"/>\n    <application|' "$MANIFEST"
+          fi
+          if [ -f android/app/build.gradle ]; then
+            sed -i 's/minSdkVersion .*/minSdkVersion 24/' android/app/build.gradle || true
+            sed -i 's/minSdk = .*/minSdk = 24/' android/app/build.gradle || true
+          fi
+          if [ -f android/app/build.gradle.kts ]; then
+            sed -i 's/minSdk = .*/minSdk = 24/' android/app/build.gradle.kts || true
           fi
 
       - name: Get dependencies
@@ -42,9 +56,12 @@ jobs:
         working-directory: mobile
         run: flutter analyze --no-fatal-infos || true
 
-      - name: Build APK (release, single universal)
+      - name: Build APK (release)
         working-directory: mobile
-        run: flutter build apk --release
+        run: |
+          set -e
+          flutter build apk --release --no-tree-shake-icons
+          test -f build/app/outputs/flutter-apk/app-release.apk
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
@@ -54,4 +71,5 @@ jobs:
           retention-days: 30
 
       - name: List built APK
-        run: ls -lh mobile/build/app/outputs/flutter-apk/ || true
+        if: always()
+        run: ls -lah mobile/build/app/outputs/flutter-apk/ || true

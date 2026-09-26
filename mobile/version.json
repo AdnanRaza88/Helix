@@ -1,6 +1,6 @@
 {
-  "version": "1.8.0",
-  "build": 9,
-  "notes": "Phase F: destructive tools with typed DELETE confirm, session export, tests, splash branding",
+  "version": "1.8.1",
+  "build": 10,
+  "notes": "Fix UI import paths (repos_page) + CI Java17/minSdk24 so APK builds reliably",
   "apk_url": "https://github.com/AdnanRaza88/Helix/releases/latest/download/helix.apk"
 }
