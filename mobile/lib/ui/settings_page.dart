@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../github.dart';
 import '../llm/catalog.dart';
+import '../llm/ollama.dart';
 import 'theme.dart';
 import 'widgets/glass.dart';
 
@@ -12,6 +14,7 @@ class SettingsSavePayload {
     required this.geminiKey,
     required this.groqKey,
     required this.openRouterKey,
+    required this.ollamaBase,
   });
 
   final String ghToken;
@@ -20,6 +23,7 @@ class SettingsSavePayload {
   final String geminiKey;
   final String groqKey;
   final String openRouterKey;
+  final String ollamaBase;
 }
 
 class SettingsPage extends StatefulWidget {
@@ -30,6 +34,7 @@ class SettingsPage extends StatefulWidget {
     required this.geminiKey,
     required this.groqKey,
     required this.openRouterKey,
+    required this.ollamaBase,
     required this.onSave,
   });
 
@@ -39,6 +44,7 @@ class SettingsPage extends StatefulWidget {
   final String geminiKey;
   final String groqKey;
   final String openRouterKey;
+  final String ollamaBase;
   final Future<void> Function(SettingsSavePayload p) onSave;
 
   @override
@@ -50,9 +56,21 @@ class SettingsPageState extends State<SettingsPage> {
   late final gemCtrl = TextEditingController(text: widget.geminiKey);
   late final groqCtrl = TextEditingController(text: widget.groqKey);
   late final orCtrl = TextEditingController(text: widget.openRouterKey);
+  late final ollamaCtrl = TextEditingController(text: widget.ollamaBase);
   late String provider = widget.provider;
   late String model = widget.model;
   bool saving = false;
+  bool ollamaOnline = false;
+  String? ollamaStatus;
+  String? pulling;
+  double? pullProgress;
+  List<String> installed = [];
+
+  @override
+  void initState() {
+    super.initState();
+    if (provider == 'ollama') _refreshOllama();
+  }
 
   @override
   void dispose() {
@@ -60,10 +78,90 @@ class SettingsPageState extends State<SettingsPage> {
     gemCtrl.dispose();
     groqCtrl.dispose();
     orCtrl.dispose();
+    ollamaCtrl.dispose();
     super.dispose();
   }
 
   List<LlmModel> get _models => LlmCatalog.forProvider(provider);
+
+  Future<void> _refreshOllama() async {
+    setState(() {
+      ollamaStatus = 'Checking…';
+      ollamaOnline = false;
+    });
+    try {
+      final base = ollamaCtrl.text.trim().isEmpty
+          ? 'http://127.0.0.1:11434'
+          : ollamaCtrl.text.trim();
+      final client = _makeOllama(base, model);
+      final ok = await client.ping();
+      final list = ok ? await client.listModels() : <String>[];
+      if (!mounted) return;
+      setState(() {
+        ollamaOnline = ok;
+        installed = list;
+        ollamaStatus = ok
+            ? 'Online · ${list.length} model(s)'
+            : 'Offline — start Ollama on this URL';
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        ollamaOnline = false;
+        ollamaStatus = 'Offline: $e';
+        installed = [];
+      });
+    }
+  }
+
+  OllamaClient _makeOllama(String base, String m) {
+    return OllamaClient(
+      baseUrl: base,
+      model: m,
+      github: GitHubClient(token: ''),
+    );
+  }
+
+  Future<void> _pull(LlmModel m) async {
+    final base = ollamaCtrl.text.trim().isEmpty
+        ? 'http://127.0.0.1:11434'
+        : ollamaCtrl.text.trim();
+    final client = _makeOllama(base, m.ollamaName);
+    setState(() {
+      pulling = m.ollamaName;
+      pullProgress = 0;
+      ollamaStatus = 'Pulling ${m.ollamaName}…';
+    });
+    try {
+      await for (final p in client.pullModel(m.ollamaName)) {
+        if (!mounted) return;
+        setState(() => pullProgress = p);
+      }
+      await _refreshOllama();
+      if (!mounted) return;
+      setState(() {
+        model = m.id;
+        provider = 'ollama';
+        pulling = null;
+        pullProgress = null;
+        ollamaStatus = 'Ready · ${m.label}';
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${m.label} downloaded — select Ollama & Save'),
+          backgroundColor: H.purple.withValues(alpha: 0.9),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        pulling = null;
+        pullProgress = null;
+        ollamaStatus = 'Pull failed: $e';
+      });
+    }
+  }
 
   Future<void> _save() async {
     setState(() => saving = true);
@@ -79,6 +177,9 @@ class SettingsPageState extends State<SettingsPage> {
       geminiKey: gemCtrl.text.trim(),
       groqKey: groqCtrl.text.trim(),
       openRouterKey: orCtrl.text.trim(),
+      ollamaBase: ollamaCtrl.text.trim().isEmpty
+          ? 'http://127.0.0.1:11434'
+          : ollamaCtrl.text.trim(),
     ));
     setState(() {
       saving = false;
@@ -105,7 +206,7 @@ class SettingsPageState extends State<SettingsPage> {
             style: TextStyle(
                 fontSize: 24, fontWeight: FontWeight.w700, color: H.text)),
         const SizedBox(height: 6),
-        const Text('Providers, models, and keys — chats stay on device',
+        const Text('Providers, models, Ollama pull — chats stay on device',
             style: TextStyle(color: H.textMuted, fontSize: 13)),
         const SizedBox(height: 20),
         GlassCard(
@@ -125,10 +226,6 @@ class SettingsPageState extends State<SettingsPage> {
                   obscureText: true,
                   style: const TextStyle(color: H.text),
                   decoration: _inputDeco('ghp_... or github_pat_...')),
-              const SizedBox(height: 8),
-              const Text(
-                  'Needs repo + user scopes. Create at github.com/settings/tokens',
-                  style: TextStyle(color: H.textMuted, fontSize: 12)),
             ],
           ),
         ),
@@ -154,6 +251,8 @@ class SettingsPageState extends State<SettingsPage> {
                   DropdownMenuItem(value: 'groq', child: Text('Groq (fast)')),
                   DropdownMenuItem(
                       value: 'openrouter', child: Text('OpenRouter')),
+                  DropdownMenuItem(
+                      value: 'ollama', child: Text('Ollama (local)')),
                 ],
                 onChanged: (v) {
                   if (v == null) return;
@@ -162,6 +261,7 @@ class SettingsPageState extends State<SettingsPage> {
                     final list = LlmCatalog.forProvider(v);
                     model = list.isEmpty ? '' : list.first.id;
                   });
+                  if (v == 'ollama') _refreshOllama();
                 },
               ),
               const SizedBox(height: 12),
@@ -191,96 +291,158 @@ class SettingsPageState extends State<SettingsPage> {
             ],
           ),
         ),
-        GlassCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Row(children: [
-                Icon(Icons.auto_awesome, color: H.pink, size: 20),
-                SizedBox(width: 8),
-                Text('Gemini API Key',
+        if (provider != 'ollama') ...[
+          GlassCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Gemini API Key',
                     style:
                         TextStyle(color: H.text, fontWeight: FontWeight.w600)),
-              ]),
-              const SizedBox(height: 12),
-              TextField(
-                  controller: gemCtrl,
-                  obscureText: true,
-                  style: const TextStyle(color: H.text),
-                  decoration: _inputDeco('AIza...')),
-              const SizedBox(height: 8),
-              const Text('aistudio.google.com/apikey',
-                  style: TextStyle(color: H.textMuted, fontSize: 12)),
-            ],
+                const SizedBox(height: 12),
+                TextField(
+                    controller: gemCtrl,
+                    obscureText: true,
+                    style: const TextStyle(color: H.text),
+                    decoration: _inputDeco('AIza...')),
+              ],
+            ),
           ),
-        ),
-        GlassCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Row(children: [
-                Icon(Icons.bolt, color: H.purpleSoft, size: 20),
-                SizedBox(width: 8),
-                Text('Groq API Key',
-                    style:
-                        TextStyle(color: H.text, fontWeight: FontWeight.w600)),
-              ]),
-              const SizedBox(height: 12),
-              TextField(
-                  controller: groqCtrl,
-                  obscureText: true,
-                  style: const TextStyle(color: H.text),
-                  decoration: _inputDeco('gsk_...')),
-              const SizedBox(height: 8),
-              const Text('console.groq.com — fastest remote tools',
-                  style: TextStyle(color: H.textMuted, fontSize: 12)),
-            ],
+          GlassCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Row(children: [
+                  Icon(Icons.bolt, color: H.purpleSoft, size: 20),
+                  SizedBox(width: 8),
+                  Text('Groq API Key',
+                      style: TextStyle(
+                          color: H.text, fontWeight: FontWeight.w600)),
+                ]),
+                const SizedBox(height: 12),
+                TextField(
+                    controller: groqCtrl,
+                    obscureText: true,
+                    style: const TextStyle(color: H.text),
+                    decoration: _inputDeco('gsk_...')),
+                const SizedBox(height: 8),
+                const Text('console.groq.com — fastest remote tools',
+                    style: TextStyle(color: H.textMuted, fontSize: 12)),
+              ],
+            ),
           ),
-        ),
+          GlassCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('OpenRouter API Key',
+                    style:
+                        TextStyle(color: H.text, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 12),
+                TextField(
+                    controller: orCtrl,
+                    obscureText: true,
+                    style: const TextStyle(color: H.text),
+                    decoration: _inputDeco('sk-or-...')),
+                const SizedBox(height: 8),
+                const Text(
+                    'openrouter.ai — Qwen, Nemotron, Llama',
+                    style: TextStyle(color: H.textMuted, fontSize: 12)),
+              ],
+            ),
+          ),
+        ],
         GlassCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Row(children: [
-                Icon(Icons.route, color: H.pink, size: 20),
+                Icon(Icons.storage_rounded, color: H.pink, size: 20),
                 SizedBox(width: 8),
-                Text('OpenRouter API Key',
+                Text('Ollama (local)',
                     style:
                         TextStyle(color: H.text, fontWeight: FontWeight.w600)),
               ]),
-              const SizedBox(height: 12),
-              TextField(
-                  controller: orCtrl,
-                  obscureText: true,
-                  style: const TextStyle(color: H.text),
-                  decoration: _inputDeco('sk-or-...')),
               const SizedBox(height: 8),
               const Text(
-                  'openrouter.ai — Qwen Coder, Nemotron, Llama, etc.',
-                  style: TextStyle(color: H.textMuted, fontSize: 12)),
-            ],
-          ),
-        ),
-        GlassCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('Local models (Ollama next)',
-                  style:
-                      TextStyle(color: H.text, fontWeight: FontWeight.w600)),
-              const SizedBox(height: 8),
-              ...LlmCatalog.localSuggestions.map((m) => Padding(
-                    padding: const EdgeInsets.only(bottom: 6),
-                    child: Text(
-                      '• ${m.label}${m.contextK != null ? ' · ${m.contextK}K ctx' : ''}${m.note != null ? ' — ${m.note}' : ''}',
-                      style:
-                          const TextStyle(color: H.textMuted, fontSize: 12),
+                'Phone: point to PC LAN IP running Ollama.\n'
+                'Emulator: http://10.0.2.2:11434 · Device: http://127.0.0.1:11434 or http://192.168.x.x:11434',
+                style: TextStyle(color: H.textMuted, fontSize: 11, height: 1.35),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: ollamaCtrl,
+                style: const TextStyle(color: H.text),
+                decoration: _inputDeco('http://127.0.0.1:11434'),
+              ),
+              const SizedBox(height: 10),
+              Row(children: [
+                FilledButton.tonal(
+                  onPressed: pulling != null ? null : _refreshOllama,
+                  child: const Text('Check'),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    ollamaStatus ?? 'Not checked',
+                    style: TextStyle(
+                      color: ollamaOnline ? H.success : H.textMuted,
+                      fontSize: 12,
                     ),
-                  )),
-              const SizedBox(height: 4),
-              const Text(
-                  'Pull via Ollama on device/PC; wire-up in next phase.',
-                  style: TextStyle(color: H.textMuted, fontSize: 11)),
+                  ),
+                ),
+              ]),
+              if (pullProgress != null) ...[
+                const SizedBox(height: 10),
+                LinearProgressIndicator(
+                  value: pullProgress,
+                  color: H.purple,
+                  backgroundColor: H.glassBorder,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Downloading $pulling… ${((pullProgress ?? 0) * 100).toStringAsFixed(0)}%',
+                  style: const TextStyle(color: H.textMuted, fontSize: 11),
+                ),
+              ],
+              const SizedBox(height: 14),
+              const Text('One-tap download (then use)',
+                  style: TextStyle(color: H.text, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 8),
+              ...LlmCatalog.forProvider('ollama').map((m) {
+                final have = installed.any((n) =>
+                    n == m.ollamaName ||
+                    n.startsWith('${m.ollamaName}:') ||
+                    n.split(':').first == m.ollamaName.split(':').first);
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          '${m.label}${m.contextK != null ? ' · ${m.contextK}K' : ''}${m.note != null ? '\n${m.note}' : ''}',
+                          style: const TextStyle(
+                              color: H.text, fontSize: 13, height: 1.25),
+                        ),
+                      ),
+                      if (have)
+                        const Padding(
+                          padding: EdgeInsets.only(right: 8),
+                          child: Icon(Icons.check_circle,
+                              color: H.success, size: 18),
+                        ),
+                      FilledButton(
+                        onPressed: pulling != null ? null : () => _pull(m),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: H.purple,
+                          visualDensity: VisualDensity.compact,
+                        ),
+                        child: Text(have ? 'Re-pull' : 'Download'),
+                      ),
+                    ],
+                  ),
+                );
+              }),
             ],
           ),
         ),
