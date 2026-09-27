@@ -1,6 +1,6 @@
 {
-  "version": "1.9.0",
-  "build": 11,
-  "notes": "Multi-provider LLM (Gemini, Groq, OpenRouter), model picker, Nemotron/Qwen catalog, in-app APK download+install (data preserved)",
+  "version": "1.9.1",
+  "build": 12,
+  "notes": "Ollama provider + one-tap model download (Nemotron, Qwen, Gemma). Multi-provider fixes. In-app update.",
   "apk_url": "https://github.com/AdnanRaza88/Helix/releases/latest/download/helix.apk"
 }
