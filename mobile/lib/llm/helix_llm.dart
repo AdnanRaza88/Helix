@@ -2,6 +2,7 @@ import '../gemini.dart' as g;
 import '../github.dart';
 import '../agent/tool_router.dart';
 import 'openai_compat.dart' as oai;
+import 'ollama.dart' as ol;
 import 'catalog.dart';
 
 class HelixAbort {
@@ -22,6 +23,7 @@ class HelixLlm {
     this.geminiKey = '',
     this.groqKey = '',
     this.openRouterKey = '',
+    this.ollamaBase = 'http://127.0.0.1:11434',
     MutationConfirm? confirm,
   }) {
     _rebuild(confirm: confirm);
@@ -33,10 +35,14 @@ class HelixLlm {
   String geminiKey;
   String groqKey;
   String openRouterKey;
+  String ollamaBase;
   g.GeminiClient? _gemini;
   oai.OpenAiCompatClient? _oai;
+  ol.OllamaClient? _ollama;
   String? activeRepo;
   MutationConfirm? _confirm;
+
+  ol.OllamaClient? get ollama => _ollama;
 
   bool get isLive {
     switch (provider) {
@@ -44,6 +50,8 @@ class HelixLlm {
         return groqKey.isNotEmpty;
       case 'openrouter':
         return openRouterKey.isNotEmpty;
+      case 'ollama':
+        return model.isNotEmpty;
       default:
         return geminiKey.isNotEmpty;
     }
@@ -62,11 +70,13 @@ class HelixLlm {
     _confirm = fn;
     _gemini?.bindConfirm(fn);
     _oai?.bindConfirm(fn);
+    _ollama?.bindConfirm(fn);
   }
 
   void stop() {
     _gemini?.stop();
     _oai?.stop();
+    _ollama?.stop();
   }
 
   void reconfigure({
@@ -75,6 +85,7 @@ class HelixLlm {
     String? geminiKey,
     String? groqKey,
     String? openRouterKey,
+    String? ollamaBase,
     String? activeRepo,
   }) {
     this.provider = provider;
@@ -82,6 +93,7 @@ class HelixLlm {
     if (geminiKey != null) this.geminiKey = geminiKey;
     if (groqKey != null) this.groqKey = groqKey;
     if (openRouterKey != null) this.openRouterKey = openRouterKey;
+    if (ollamaBase != null) this.ollamaBase = ollamaBase;
     if (activeRepo != null) this.activeRepo = activeRepo;
     _rebuild(confirm: _confirm);
   }
@@ -90,11 +102,13 @@ class HelixLlm {
     activeRepo = repo;
     _gemini?.activeRepo = repo;
     _oai?.activeRepo = repo;
+    _ollama?.activeRepo = repo;
   }
 
   void _rebuild({MutationConfirm? confirm}) {
     _gemini = null;
     _oai = null;
+    _ollama = null;
     switch (provider) {
       case 'groq':
         _oai = oai.OpenAiCompatClient(
@@ -122,6 +136,14 @@ class HelixLlm {
           },
         )..activeRepo = activeRepo;
         break;
+      case 'ollama':
+        _ollama = ol.OllamaClient(
+          baseUrl: ollamaBase.isEmpty ? 'http://127.0.0.1:11434' : ollamaBase,
+          model: model.isEmpty ? 'qwen2.5-coder:1.5b' : model,
+          github: github,
+          confirm: confirm,
+        )..activeRepo = activeRepo;
+        break;
       default:
         _gemini = g.GeminiClient(
           apiKey: geminiKey,
@@ -140,6 +162,15 @@ class HelixLlm {
     HelixAbort? abort,
   }) {
     final a = abort ?? HelixAbort();
+    if (_ollama != null) {
+      return _ollama!.runWithTools(
+        userMessage,
+        history: history,
+        onDelta: onDelta,
+        onTool: onTool,
+        abort: a._o,
+      );
+    }
     if (_oai != null) {
       return _oai!.runWithTools(
         userMessage,
