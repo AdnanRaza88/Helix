@@ -6,6 +6,7 @@ class LlmModel {
     this.contextK,
     this.local = false,
     this.note,
+    this.pullTag,
   });
 
   final String id;
@@ -14,6 +15,9 @@ class LlmModel {
   final int? contextK;
   final bool local;
   final String? note;
+  final String? pullTag;
+
+  String get ollamaName => pullTag ?? id;
 }
 
 class LlmCatalog {
@@ -21,6 +25,7 @@ class LlmCatalog {
     'gemini',
     'groq',
     'openrouter',
+    'ollama',
   ];
 
   static const models = <LlmModel>[
@@ -86,15 +91,12 @@ class LlmCatalog {
       contextK: 128,
     ),
     LlmModel(
-      id: 'nvidia/nemotron-nano-4b',
-      label: 'Nemotron Nano 4B',
+      id: 'nvidia/llama-3.1-nemotron-nano-8b-v1',
+      label: 'Nemotron Nano 8B',
       provider: 'openrouter',
-      contextK: 256,
-      note: 'NVIDIA · long ctx edge',
+      contextK: 128,
+      note: 'NVIDIA Nemotron',
     ),
-  ];
-
-  static const localSuggestions = <LlmModel>[
     LlmModel(
       id: 'qwen2.5-coder:1.5b',
       label: 'Qwen2.5 Coder 1.5B',
@@ -119,12 +121,22 @@ class LlmCatalog {
       note: 'Best small agent',
     ),
     LlmModel(
-      id: 'nemotron-3-nano:4b',
-      label: 'Nemotron 3 Nano 4B',
+      id: 'nemotron-mini',
+      label: 'Nemotron Mini 4B',
       provider: 'ollama',
-      contextK: 256,
+      contextK: 4,
       local: true,
-      note: 'Long context edge',
+      note: 'NVIDIA · tools',
+      pullTag: 'nemotron-mini',
+    ),
+    LlmModel(
+      id: 'nemotron',
+      label: 'Nemotron',
+      provider: 'ollama',
+      contextK: 128,
+      local: true,
+      note: 'NVIDIA · long ctx',
+      pullTag: 'nemotron',
     ),
     LlmModel(
       id: 'gemma3:4b',
@@ -147,9 +159,6 @@ class LlmCatalog {
 
   static LlmModel? byId(String id) {
     for (final m in models) {
-      if (m.id == id) return m;
-    }
-    for (final m in localSuggestions) {
       if (m.id == id) return m;
     }
     return null;
