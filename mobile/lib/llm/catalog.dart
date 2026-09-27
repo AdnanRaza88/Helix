@@ -71,6 +71,27 @@ class LlmCatalog {
       contextK: 1000,
     ),
     LlmModel(
+      id: 'nvidia/nemotron-nano-9b-v2',
+      label: 'Nemotron Nano 9B v2',
+      provider: 'openrouter',
+      contextK: 128,
+      note: 'NVIDIA · HF open weights · agentic',
+    ),
+    LlmModel(
+      id: 'nvidia/llama-3.1-nemotron-nano-8b-v1',
+      label: 'Nemotron Nano 8B v1',
+      provider: 'openrouter',
+      contextK: 128,
+      note: 'NVIDIA Nemotron',
+    ),
+    LlmModel(
+      id: 'qwen/qwen-2.5-coder-32b-instruct',
+      label: 'Qwen2.5 Coder 32B',
+      provider: 'openrouter',
+      contextK: 32,
+      note: 'Best coding · HF Qwen2.5-Coder',
+    ),
+    LlmModel(
       id: 'qwen/qwen2.5-coder-7b-instruct',
       label: 'Qwen2.5 Coder 7B',
       provider: 'openrouter',
@@ -89,13 +110,6 @@ class LlmCatalog {
       label: 'Llama 3.1 8B',
       provider: 'openrouter',
       contextK: 128,
-    ),
-    LlmModel(
-      id: 'nvidia/llama-3.1-nemotron-nano-8b-v1',
-      label: 'Nemotron Nano 8B',
-      provider: 'openrouter',
-      contextK: 128,
-      note: 'NVIDIA Nemotron',
     ),
     LlmModel(
       id: 'qwen2.5-coder:1.5b',

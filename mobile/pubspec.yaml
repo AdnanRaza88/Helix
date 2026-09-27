@@ -1,7 +1,7 @@
 name: helix
 description: Helix — VIP glassmorphism GitHub agent with multi-provider LLM
 publish_to: none
-version: 1.9.1+12
+version: 1.9.2+13
 
 environment:
   sdk: ">=3.5.0 <4.0.0"
