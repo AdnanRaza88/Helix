@@ -27,6 +27,7 @@ class _ShellState extends State<Shell> {
   String geminiKey = '';
   String groqKey = '';
   String openRouterKey = '';
+  String ollamaBase = 'http://127.0.0.1:11434';
   String provider = 'gemini';
   String model = 'gemini-2.5-flash';
   List<dynamic> repos = [];
@@ -44,11 +45,7 @@ class _ShellState extends State<Shell> {
   void initState() {
     super.initState();
     github = GitHubClient(token: '');
-    llm = HelixLlm(
-      provider: provider,
-      model: model,
-      github: github,
-    );
+    llm = HelixLlm(provider: provider, model: model, github: github);
     _load();
     _checkUpdate();
   }
@@ -64,6 +61,8 @@ class _ShellState extends State<Shell> {
     geminiKey = prefs.getString('gemini_key') ?? '';
     groqKey = prefs.getString('groq_key') ?? '';
     openRouterKey = prefs.getString('openrouter_key') ?? '';
+    ollamaBase =
+        prefs.getString('ollama_base') ?? 'http://127.0.0.1:11434';
     provider = prefs.getString('llm_provider') ?? 'gemini';
     model = prefs.getString('llm_model') ?? LlmCatalog.defaultModel(provider);
     activeRepo = prefs.getString('helix_active_repo');
@@ -75,6 +74,7 @@ class _ShellState extends State<Shell> {
       geminiKey: geminiKey,
       groqKey: groqKey,
       openRouterKey: openRouterKey,
+      ollamaBase: ollamaBase,
     )..setActiveRepo(activeRepo);
     await _refresh();
   }
@@ -117,6 +117,7 @@ class _ShellState extends State<Shell> {
     await prefs.setString('gemini_key', p.geminiKey);
     await prefs.setString('groq_key', p.groqKey);
     await prefs.setString('openrouter_key', p.openRouterKey);
+    await prefs.setString('ollama_base', p.ollamaBase);
     await prefs.setString('llm_provider', p.provider);
     await prefs.setString('llm_model', p.model);
     setState(() {
@@ -124,6 +125,7 @@ class _ShellState extends State<Shell> {
       geminiKey = p.geminiKey;
       groqKey = p.groqKey;
       openRouterKey = p.openRouterKey;
+      ollamaBase = p.ollamaBase;
       provider = p.provider;
       model = p.model;
       github = GitHubClient(token: p.ghToken);
@@ -134,6 +136,7 @@ class _ShellState extends State<Shell> {
         geminiKey: p.geminiKey,
         groqKey: p.groqKey,
         openRouterKey: p.openRouterKey,
+        ollamaBase: p.ollamaBase,
       )..setActiveRepo(activeRepo);
     });
     await _refresh();
@@ -141,8 +144,7 @@ class _ShellState extends State<Shell> {
 
   Future<void> _openUpdate() async {
     final info = updateInfo;
-    if (info == null) return;
-    if (updating) return;
+    if (info == null || updating) return;
 
     final action = await showModalBottomSheet<String>(
       context: context,
@@ -170,7 +172,7 @@ class _ShellState extends State<Shell> {
                           color: H.textMuted, fontSize: 14, height: 1.4)),
                   const SizedBox(height: 12),
                   const Text(
-                    'Chats, tokens, and SQLite stay on device. Same app signature keeps data.',
+                    'Chats and keys stay on device when you install over the same app signature.',
                     style: TextStyle(color: H.textMuted, fontSize: 12),
                   ),
                   const SizedBox(height: 16),
@@ -214,7 +216,7 @@ class _ShellState extends State<Shell> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: const Text(
-                'Install prompt opened. Keep Helix when asked — data is safe.'),
+                'Install prompt opened. Keep Helix — data is safe.'),
             backgroundColor: H.purple.withValues(alpha: 0.9),
             behavior: SnackBarBehavior.floating,
           ),
@@ -268,6 +270,7 @@ class _ShellState extends State<Shell> {
         geminiKey: geminiKey,
         groqKey: groqKey,
         openRouterKey: openRouterKey,
+        ollamaBase: ollamaBase,
         onSave: _saveSettings,
       ),
     ];
