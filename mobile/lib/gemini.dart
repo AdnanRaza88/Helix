@@ -3,9 +3,11 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import 'agent/context_compactor.dart';
+import 'agent/conversation_engine.dart';
 import 'agent/system_prompt.dart';
 import 'agent/tool_router.dart';
 import 'github.dart';
+import 'mcp/mcp_host.dart';
 import 'skills/github_ops.dart';
 
 class StreamAbort {
@@ -15,19 +17,20 @@ class StreamAbort {
 
 class GeminiClient {
   GeminiClient({required this.apiKey, required this.github, this.confirm})
-      : router = ToolRouter(ops: GithubOps(github), confirm: confirm);
+      : mcp = McpHost(ops: GithubOps(github), confirm: confirm);
 
   final String apiKey;
   final GitHubClient github;
   final MutationConfirm? confirm;
-  final ToolRouter router;
+  final McpHost mcp;
   StreamAbort? activeAbort;
   String? activeRepo;
 
   bool get isLive => apiKey.isNotEmpty;
+  ToolRouter get router => mcp.router;
 
   void bindConfirm(MutationConfirm fn) {
-    router.confirm = fn;
+    mcp.router.confirm = fn;
   }
 
   void stop() {
@@ -36,7 +39,6 @@ class GeminiClient {
 
   static const _models = [
     'gemini-2.5-flash',
-    'gemini-3.5-flash',
     'gemini-2.0-flash',
     'gemini-flash-latest',
   ];
@@ -82,18 +84,18 @@ class GeminiClient {
       ],
     });
 
-    final tools = [
-      {'functionDeclarations': router.functionDeclarations}
-    ];
-
+    final tools = mcp.geminiTools();
     String lastText = '';
-    for (var hop = 0; hop < 6; hop++) {
+    const maxTurns = 12;
+
+    for (var hop = 0; hop < maxTurns; hop++) {
       if (token.cancelled) return lastText.isEmpty ? 'Stopped.' : lastText;
       final parsed = await _generateStream(contents, tools, token, onDelta);
       lastText = parsed.text.isNotEmpty ? parsed.text : lastText;
       if (parsed.calls.isEmpty) {
         return lastText.isEmpty ? 'Empty response.' : lastText;
       }
+
       contents.add({
         'role': 'model',
         'parts': parsed.calls
@@ -105,28 +107,36 @@ class GeminiClient {
                 })
             .toList(),
       });
-      final responseParts = <Map<String, dynamic>>[];
+
+      final futures = <Future<Map<String, dynamic>>>[];
       for (final c in parsed.calls) {
         if (token.cancelled) break;
         final name = '${c['name'] ?? ''}';
         onTool?.call(name);
         final args = Map<String, dynamic>.from(c['args'] as Map? ?? {});
-        String result;
-        try {
-          result = await router.dispatch(name, args);
-        } catch (e) {
-          result = jsonEncode({'error': e.toString()});
-        }
-        responseParts.add({
-          'functionResponse': {
-            'name': name,
-            'response': {'result': result},
+        futures.add(() async {
+          try {
+            final result = await mcp.router.dispatch(name, args);
+            return {
+              'functionResponse': {
+                'name': name,
+                'response': {'result': result},
+              }
+            };
+          } catch (e) {
+            return {
+              'functionResponse': {
+                'name': name,
+                'response': {'error': e.toString()},
+              }
+            };
           }
-        });
+        }());
       }
+      final responseParts = await Future.wait(futures);
       contents.add({'role': 'user', 'parts': responseParts});
     }
-    return lastText.isEmpty ? 'Tool loop stopped.' : lastText;
+    return lastText.isEmpty ? 'Reached max agent turns.' : lastText;
   }
 
   Future<_Parsed> _generateStream(
@@ -150,7 +160,7 @@ class GeminiClient {
       'tools': tools,
       'generationConfig': {
         'temperature': 0.3,
-        'maxOutputTokens': 2048,
+        'maxOutputTokens': 4096,
       },
     };
 
@@ -158,8 +168,8 @@ class GeminiClient {
     for (final model in _models) {
       if (abort.cancelled) return _Parsed('', []);
       try {
-        final uri =
-            Uri.parse('$_base/$model:streamGenerateContent?alt=sse&key=$apiKey');
+        final uri = Uri.parse(
+            '$_base/$model:streamGenerateContent?alt=sse&key=$apiKey');
         final req = http.Request('POST', uri)
           ..headers['Content-Type'] = 'application/json'
           ..body = jsonEncode(body);
@@ -238,7 +248,7 @@ class GeminiClient {
           'Add a Gemini API key and GitHub token in Settings to unlock live tools.';
     }
     return '[SIM] Simulation mode.\n'
-        'Phase 2 tools: PRs, branches, Actions list/trigger, code review.\n'
+        'Ask about repos, issues, files, PRs, or Actions.\n'
         'Writes require confirm when live.'
         '${activeRepo == null ? '' : '\nActive repo: $activeRepo'}';
   }
