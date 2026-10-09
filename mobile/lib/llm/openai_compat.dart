@@ -3,9 +3,11 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../agent/context_compactor.dart';
+import '../agent/conversation_engine.dart';
 import '../agent/system_prompt.dart';
 import '../agent/tool_router.dart';
 import '../github.dart';
+import '../mcp/mcp_host.dart';
 import '../skills/github_ops.dart';
 
 class StreamAbort {
@@ -22,7 +24,10 @@ class OpenAiCompatClient {
     this.confirm,
     this.providerLabel = 'OpenAI',
     this.extraHeaders = const {},
-  }) : router = ToolRouter(ops: GithubOps(github), confirm: confirm);
+  }) {
+    mcp = McpHost(ops: GithubOps(github), confirm: confirm);
+    engine = ConversationEngine(router: mcp.router, maxTurns: 12);
+  }
 
   final String apiKey;
   final String baseUrl;
@@ -31,14 +36,16 @@ class OpenAiCompatClient {
   final MutationConfirm? confirm;
   final String providerLabel;
   final Map<String, String> extraHeaders;
-  final ToolRouter router;
+  late final McpHost mcp;
+  late final ConversationEngine engine;
   StreamAbort? activeAbort;
   String? activeRepo;
 
   bool get isLive => apiKey.isNotEmpty;
+  ToolRouter get router => mcp.router;
 
   void bindConfirm(MutationConfirm fn) {
-    router.confirm = fn;
+    mcp.router.confirm = fn;
   }
 
   void stop() {
@@ -86,71 +93,29 @@ class OpenAiCompatClient {
     }
     messages.add({'role': 'user', 'content': userMessage});
 
-    final tools = router.functionDeclarations
-        .map((d) => {
-              'type': 'function',
-              'function': d,
-            })
-        .toList();
+    final tools = mcp.openAiTools();
+    final loopAbort = LoopAbort();
 
-    String lastText = '';
-    for (var hop = 0; hop < 6; hop++) {
-      if (token.cancelled) return lastText.isEmpty ? 'Stopped.' : lastText;
-      final parsed = await _chat(messages, tools, token, onDelta);
-      lastText = parsed.text.isNotEmpty ? parsed.text : lastText;
-      if (parsed.calls.isEmpty) {
-        return lastText.isEmpty ? 'Empty response.' : lastText;
-      }
-
-      messages.add({
-        'role': 'assistant',
-        'content': parsed.text.isEmpty ? null : parsed.text,
-        'tool_calls': parsed.calls
-            .asMap()
-            .entries
-            .map((e) => {
-                  'id': e.value['id'] ?? 'call_${e.key}',
-                  'type': 'function',
-                  'function': {
-                    'name': e.value['name'],
-                    'arguments': e.value['arguments'] is String
-                        ? e.value['arguments']
-                        : jsonEncode(e.value['arguments'] ?? {}),
-                  },
-                })
-            .toList(),
-      });
-
-      for (final call in parsed.calls) {
-        if (token.cancelled) break;
-        final name = '${call['name'] ?? ''}';
-        onTool?.call(name);
-        Map<String, dynamic> args = {};
-        final rawArgs = call['arguments'];
-        if (rawArgs is String && rawArgs.isNotEmpty) {
-          try {
-            final d = jsonDecode(rawArgs);
-            if (d is Map) args = Map<String, dynamic>.from(d);
-          } catch (_) {}
-        } else if (rawArgs is Map) {
-          args = Map<String, dynamic>.from(rawArgs);
+    return engine.run(
+      messages: messages,
+      tools: tools,
+      abort: loopAbort,
+      onDelta: onDelta,
+      onTool: onTool,
+      callModel: (msgs, tls) async {
+        if (token.cancelled) {
+          loopAbort.cancel();
+          return const ModelHop();
         }
-        final result = await router.dispatch(name, args);
-        messages.add({
-          'role': 'tool',
-          'tool_call_id': call['id'] ?? 'call_0',
-          'content': result,
-        });
-      }
-    }
-    return lastText.isEmpty ? 'Tool loop ended.' : lastText;
+        return _chatHop(msgs, tls, token);
+      },
+    );
   }
 
-  Future<_Parsed> _chat(
+  Future<ModelHop> _chatHop(
     List<Map<String, dynamic>> messages,
     List<Map<String, dynamic>> tools,
     StreamAbort abort,
-    void Function(String delta)? onDelta,
   ) async {
     final uri = Uri.parse(
       baseUrl.endsWith('/')
@@ -168,39 +133,43 @@ class OpenAiCompatClient {
       'tools': tools,
       'tool_choice': 'auto',
       'stream': false,
-      'temperature': 0.4,
+      'temperature': 0.35,
     });
 
     final res = await http
         .post(uri, headers: headers, body: body)
-        .timeout(const Duration(seconds: 90));
-    if (abort.cancelled) return _Parsed('', []);
+        .timeout(const Duration(seconds: 120));
+    if (abort.cancelled) return const ModelHop();
     if (res.statusCode >= 400) {
       throw Exception('$providerLabel ${res.statusCode}: ${res.body}');
     }
     final data = jsonDecode(res.body) as Map<String, dynamic>;
     final choices = data['choices'] as List? ?? const [];
-    if (choices.isEmpty) return _Parsed('', []);
+    if (choices.isEmpty) return const ModelHop();
     final msg = choices[0]['message'] as Map<String, dynamic>? ?? {};
     final text = (msg['content'] as String?) ?? '';
-    if (text.isNotEmpty) onDelta?.call(text);
-    final calls = <Map<String, dynamic>>[];
+    final calls = <ToolCallRequest>[];
     final toolCalls = msg['tool_calls'] as List? ?? const [];
-    for (final c in toolCalls) {
+    for (var i = 0; i < toolCalls.length; i++) {
+      final c = toolCalls[i];
       if (c is! Map) continue;
       final fn = c['function'] as Map? ?? {};
-      calls.add({
-        'id': c['id'],
-        'name': fn['name'],
-        'arguments': fn['arguments'],
-      });
+      Map<String, dynamic> args = {};
+      final rawArgs = fn['arguments'];
+      if (rawArgs is String && rawArgs.isNotEmpty) {
+        try {
+          final d = jsonDecode(rawArgs);
+          if (d is Map) args = Map<String, dynamic>.from(d);
+        } catch (_) {}
+      } else if (rawArgs is Map) {
+        args = Map<String, dynamic>.from(rawArgs);
+      }
+      calls.add(ToolCallRequest(
+        id: '${c['id'] ?? 'call_$i'}',
+        name: '${fn['name'] ?? ''}',
+        arguments: args,
+      ));
     }
-    return _Parsed(text, calls);
+    return ModelHop(text: text, calls: calls);
   }
-}
-
-class _Parsed {
-  _Parsed(this.text, this.calls);
-  final String text;
-  final List<Map<String, dynamic>> calls;
 }
