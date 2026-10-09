@@ -1,6 +1,6 @@
 {
-  "version": "1.9.2",
-  "build": 13,
-  "notes": "Nemotron Nano 9B + Qwen2.5 Coder 32B on OpenRouter; Ollama pull; in-app update via GitHub Release helix.apk",
+  "version": "1.10.0",
+  "build": 14,
+  "notes": "Conversation engine (ChatGPT/Claude-style agent loop), MCP-style tool host, parallel tools, max 12 turns",
   "apk_url": "https://github.com/AdnanRaza88/Helix/releases/latest/download/helix.apk"
 }
